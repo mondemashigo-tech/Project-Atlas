@@ -4,11 +4,11 @@ no MT5 and no real dataset. Also asserts a couple of correctness invariants."""
 import numpy as np
 import pandas as pd
 
-from atlas.indicators import ema, atr
-from atlas.strategies.base import Strategy
-from atlas.strategies import trend_continuation  # noqa: registers template
-from atlas.backtester import run
-from atlas.metrics import compute, verdict
+from atlas.research.fx.indicators import ema, atr
+from atlas.research.fx.strategies.base import Strategy
+from atlas.research.fx.strategies import trend_continuation  # noqa: registers template
+from atlas.research.fx.backtester import run
+from atlas.research.fx.metrics import compute, verdict
 
 
 def _synth(n=6000, seed=1):

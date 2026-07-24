@@ -3,10 +3,10 @@ Each is exercised on synthetic data matched to its premise. Synthetic only."""
 import numpy as np
 import pandas as pd
 
-from atlas.backtester import run
-from atlas.config import load
-from atlas.strategies.base import Strategy
-import atlas.strategies  # noqa: registers all templates
+from atlas.research.fx.backtester import run
+from atlas.research.fx.config import load
+from atlas.research.fx.strategies.base import Strategy
+import atlas.research.fx.strategies  # noqa: registers all templates
 
 
 def _mean_reverting(n=8000, seed=1):

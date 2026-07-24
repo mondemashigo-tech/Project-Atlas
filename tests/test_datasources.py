@@ -7,10 +7,10 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from atlas import datasources as ds
-from atlas import runner
-from atlas.filters import CarryFilter, NewsFilter, build
-from atlas.strategies import trend_continuation  # noqa: registers template
+from atlas.research.fx import datasources as ds
+from atlas.research.fx import runner
+from atlas.research.fx.filters import CarryFilter, NewsFilter, build
+from atlas.research.fx.strategies import trend_continuation  # noqa: registers template
 
 
 def _write_prices(datasets_dir, symbol="GBPUSD", n=30000, seed=1):

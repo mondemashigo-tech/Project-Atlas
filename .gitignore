@@ -4,4 +4,11 @@ __pycache__/
 datasets/*.csv
 reports/*.txt
 reports/*.csv
+reports/*.html
+reports/*.json
+.pytest_cache/
+# Atlas runtime artifacts (SQLite is source of truth; vault is a generated mirror)
+atlas_memory.db
+atlas_registry.db
+vault/
 .DS_Store

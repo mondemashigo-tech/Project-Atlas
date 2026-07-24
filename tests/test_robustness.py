@@ -6,9 +6,9 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from atlas import montecarlo as mc
-from atlas import walkforward as wf
-from atlas.strategies import trend_continuation  # noqa: registers template
+from atlas.research.fx import montecarlo as mc
+from atlas.research.fx import walkforward as wf
+from atlas.research.fx.strategies import trend_continuation  # noqa: registers template
 
 
 # ---- Monte Carlo -----------------------------------------------------------

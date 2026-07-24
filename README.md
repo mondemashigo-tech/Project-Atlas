@@ -1,13 +1,21 @@
 # Project Atlas
 
-A modular quantitative FX hypothesis-testing platform. It exists to answer one
-question honestly, *before* any money is risked:
+**An AI research laboratory** (and the foundation for a future assistant). Atlas
+turns ideas into pre-registered hypotheses, tests them against unseen data,
+rejects weak ideas fast, remembers everything, and *approves* a rare few for
+execution. It answers one question honestly, *before* any money is risked:
 
 > **Does this strategy have a real, out-of-sample edge that survives costs?**
 
-Atlas does not try to make a strategy look good. It tries to make it *fail* —
-on data it never saw — against thresholds frozen in advance. If a hypothesis
-survives that, it earns a live trial. If it doesn't, we learn cheaply.
+Atlas does not try to make a strategy look good. It tries to make it *fail* — on
+data it never saw — against thresholds frozen in advance. See the full design in
+`docs/ATLAS_MASTER_PLAN.md` (Volumes 1–5 are the source of truth).
+
+**Atlas is the parent system.** The FX strategy engine is *one research module*
+(`atlas/research/fx/`). The trading bot is a future **execution engine** that
+only ever reads approved strategies from the **Strategy Registry** — the airlock
+between research and execution. Atlas researches and validates; the bot executes
+only what Atlas has approved (human-gated).
 
 ## Why this exists
 
@@ -33,45 +41,53 @@ hypothesis.yaml  ->  load data  ->  split in/out-of-sample  ->  backtest
   are scale-invariant and comparable across markets and account sizes.
 - **Costs baked in**: spread + commission are charged on every trade.
 
-## Layout
+## Layout (parent system)
 
 | Path | Purpose |
 |---|---|
-| `atlas/indicators.py` | ema, atr, rsi, swing high/low (pure vectorized) |
-| `atlas/data.py` | portable CSV loader + resampler (not tied to live MT5) |
-| `atlas/strategies/` | config-driven registry + templates: `trend_continuation` (pullback), `mean_reversion` (z-score fade), `breakout` (Donchian channel) |
-| `atlas/backtester.py` | event loop, next-bar fill + spread, bar-by-bar SL/TP |
-| `atlas/metrics.py` | PF, expectancy, drawdown, Sharpe — all in R units |
-| `atlas/splits.py` | in-sample / out-of-sample separation |
-| `atlas/walkforward.py` | anchored walk-forward + optional param-grid optimisation |
-| `atlas/montecarlo.py` | bootstrap + shuffle resampling of the trade sequence |
-| `atlas/optimizer.py` | grid search (ranked IS, reported OOS, overfit-gap flag) |
-| `atlas/paramgrid.py` | shared parameter-grid expansion |
-| `atlas/journal.py` | append-only JSONL research log with config fingerprints |
-| `atlas/charts.py` | dependency-free inline SVG (equity curve, histogram) |
-| `atlas/dashboard.py` | self-contained tabbed HTML report (print-to-PDF ready) |
-| `atlas/datasources.py` | carry (rates) + economic-calendar loaders |
-| `atlas/filters.py` | carry-alignment and news-blackout entry filters |
-| `atlas/{config,report,runner,cli}.py` | load -> run -> judge -> report |
+| `atlas/schemas/` | core data models: Hypothesis, DataSnapshot, ExperimentRecord, DecisionRecord, StrategyRecord, KnowledgeNote |
+| `atlas/memory/` | SQLite experiment store (source of truth) + Obsidian markdown mirror in `vault/` |
+| `atlas/registry/` | Strategy Registry airlock: lifecycle FSM, human-gated writes, read-only export, kill-switch, stub bot consumer |
+| `atlas/service.py` | library-first orchestration (research → memory), the seam that grows into the Kernel |
+| `atlas/interfaces/` | thin CLI adapter (`python -m atlas …`); web/voice/Obsidian later |
+| `atlas/research/fx/` | the FX research module (the preserved engine, below) |
+
+### Inside the FX research module (`atlas/research/fx/`)
+
+| Path | Purpose |
+|---|---|
+| `indicators.py` | ema, atr, rsi, swing high/low (pure vectorized) |
+| `data.py` | portable CSV loader + resampler; MT5 export + `mt5check` diagnostic |
+| `strategies/` | config-driven registry + templates: `trend_continuation` (pullback), `mean_reversion` (z-score fade), `breakout` (Donchian channel) |
+| `backtester.py` | event loop, next-bar fill + spread, bar-by-bar SL/TP |
+| `metrics.py` | PF, expectancy, drawdown, Sharpe — all in R units |
+| `splits.py` | in-sample / out-of-sample separation |
+| `walkforward.py` | anchored walk-forward + optional param-grid optimisation |
+| `montecarlo.py` | bootstrap + shuffle resampling of the trade sequence |
+| `optimizer.py` | grid search (ranked IS, reported OOS, overfit-gap flag) |
+| `journal.py` | append-only JSONL research log with config fingerprints |
+| `charts.py`, `dashboard.py` | dependency-free inline SVG + tabbed HTML report |
+| `datasources.py`, `filters.py` | carry (rates) + economic-calendar loaders and entry filters |
+| `{config,report,runner,cli}.py` | load -> run -> judge -> report |
 | `hypotheses/` | pre-registered hypotheses (frozen thresholds) |
-| `tests/` | pipeline + robustness + reporting + data-source tests (synthetic, no MT5) |
+| `tests/` | spine + pipeline + robustness + reporting + data-source tests (synthetic, no MT5) |
 
 ## Usage
 
 ```bash
 pip install -r requirements.txt
 
-# Run a pre-registered hypothesis end-to-end (add --mc for Monte Carlo on OOS)
-python -m atlas.cli run hypotheses/london_trend_continuation.yaml --mc
+# --- Atlas parent CLI ---
+# Run a hypothesis -> immutable ExperimentRecord (SQLite) + Obsidian vault mirror
+python -m atlas run hypotheses/london_trend_continuation.yaml
+python -m atlas experiments          # list recorded experiments
+python -m atlas registry list        # inspect the airlock
+python -m atlas bot                  # what the stub executor WOULD run (no orders)
 
-# Walk-forward analysis (expanding in-sample, rolls the chosen params forward)
-python -m atlas.cli wf hypotheses/london_trend_continuation.yaml --folds 5
-
-# Monte Carlo robustness on realised trades (bootstrap + shuffle)
-python -m atlas.cli mc hypotheses/london_trend_continuation.yaml --sims 5000 --window out_sample
-
-# Pull real history from MT5 into a dataset CSV (run on the bot machine)
-python -m atlas.cli export GBPUSD M5 3
+# --- FX research module CLI (deeper analysis on the engine directly) ---
+python -m atlas.research.fx.cli run hypotheses/london_trend_continuation.yaml --mc
+python -m atlas.research.fx.cli wf  hypotheses/london_trend_continuation.yaml --folds 5
+python -m atlas.research.fx.cli export GBPUSD M5 3   # pull MT5 history (bot machine)
 
 # Tests
 pytest -q
@@ -79,10 +95,16 @@ pytest -q
 
 ## Status
 
-- **Phase 1 — spine**: backtest, metrics, verdicts, splits, CLI. ✅ Complete, tests passing.
-- **Phase 2 — robustness**: walk-forward analysis + Monte Carlo (bootstrap + shuffle). ✅ Complete, tests passing.
-- **Phase 3 — surface**: optimiser, research journal, SVG charts, tabbed HTML dashboard. ✅ Complete, tests passing.
-- **Phase 4 — data**: carry (rate-differential) filter + economic-calendar news blackout. ✅ Complete, tests passing.
+**Atlas parent spine (Milestone 1)** ✅ — core schemas, SQLite memory + Obsidian
+mirror, Strategy Registry airlock (human-gated, kill-switch, stub consumer),
+library-first service + CLI. The FX engine is preserved as a research module.
+
+**FX research module** ✅ — backtest, R-unit metrics, verdicts, in/out-of-sample
+splits, walk-forward, Monte Carlo (bootstrap + shuffle), optimiser, journal, SVG
+charts, tabbed HTML dashboard, carry + economic-calendar filters.
+
+**Next:** Milestone 2 — HistData importer + `DataSnapshot` wiring (deep
+multi-regime data). Milestone 3 — Kernel FSM + Skeptic & Reporter agents.
 
 ### Data sources (Phase 4)
 
