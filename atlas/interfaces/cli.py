@@ -13,6 +13,7 @@ import argparse
 import sys
 
 from .. import service
+from ..kernel import Orchestrator
 from ..memory import MemoryStore
 from ..registry import Registry, BotStub
 from ..snapshots import make_snapshot
@@ -72,6 +73,19 @@ def _bot(args):
         reg.close()
 
 
+def _council(args):
+    res = Orchestrator(args.root).run(args.hypothesis, window=args.window)
+    h, e = res["hypothesis"], res["experiment"]
+    print(f"hypothesis {h.id} v{h.version} [{h.status}]  experiment {e.id}  "
+          f"verdict {e.verdict}")
+    print("decision ladder:")
+    for d in res["decisions"]:
+        print(f"  [{d.phase}] {d.agent}: {d.decision}  — {d.evidence[:90]}")
+    print(f"advanced: {res['advanced']}")
+    print(f"halt: {res['halt_reason']}")
+    print(f"memo: {res['memo']}")
+
+
 def _regime(args):
     report = service.regime_report(args.hypothesis, root=args.root, window=args.window)
     if not report:
@@ -121,6 +135,12 @@ def main(argv=None):
 
     b = sub.add_parser("bot", help="what the stub executor WOULD run (no orders)")
     b.set_defaults(func=_bot)
+
+    co = sub.add_parser("council", help="run the decision ladder (orchestrator + agents)")
+    co.add_argument("hypothesis")
+    co.add_argument("--window", default="out_sample",
+                    choices=["out_sample", "in_sample", "full"])
+    co.set_defaults(func=_council)
 
     rg2 = sub.add_parser("regime", help="per-regime performance breakdown of a hypothesis")
     rg2.add_argument("hypothesis")
