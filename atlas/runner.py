@@ -21,7 +21,11 @@ def _run_window(cfg, datasets_dir, window_slicer) -> Dict:
     all_trades = []
     per_market = {}
     for sym in cfg["markets"]:
-        df = data_mod.load_symbol(datasets_dir, sym, entry_tf)
+        try:
+            df = data_mod.load_symbol(datasets_dir, sym, entry_tf)
+        except FileNotFoundError:
+            per_market[sym] = {"trades": 0}
+            continue
         df = window_slicer(df, cfg)
         if len(df) < 300:
             per_market[sym] = {"trades": 0}
@@ -40,3 +44,9 @@ def run_hypothesis(cfg: dict, datasets_dir: str) -> Dict:
         "in_sample": _run_window(cfg, datasets_dir, splits.in_sample),
         "out_sample": _run_window(cfg, datasets_dir, splits.out_sample),
     }
+
+
+def run_full(cfg: dict, datasets_dir: str) -> Dict:
+    """Backtest the entire available history with no split — the full realised
+    trade set, used as the input to Monte Carlo resampling."""
+    return _run_window(cfg, datasets_dir, lambda df, _cfg: df)
