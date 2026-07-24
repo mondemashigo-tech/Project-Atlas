@@ -435,24 +435,33 @@ hypothesis can be re-judged under harsher assumptions (V4 §10).
 
 ---
 
-## 9. Open questions (only the ones that change implementation)
+## 9. Open questions — RESOLVED decisions + remaining
 
-1. **Data source & depth.** Dukascopy vs HistData vs paid feed? How many years /
-   pairs / timeframes is "enough" to grant `VALIDATED`? *(Blocks Phase B and all
-   trusted verdicts.)*
-2. **LLM agent runtime.** Are the LLM agents run inside Claude Code sessions
-   (human-in-the-loop, cheap) or as an always-on service (costly, complex)?
-   *(Decides Phase E architecture — I recommend in-session first.)*
-3. **Memory backend.** SQLite-only for the foreseeable future, or Postgres from
-   the start? *(I recommend SQLite; revisit at scale.)*
-4. **Autonomy ceiling.** What is the highest autonomy level you will ever allow
-   without a human in the loop? *(Sets governance design; I assume ≤ L3 until
-   proven.)*
+**Resolved (2026-07-24, by the researcher — preserved per V5 §15 governance):**
+1. **Data source & depth → HistData.com.** Build the importer for HistData M1
+   monthly CSVs per pair; resample to M5/H1. Deep, free, simple to ingest. Atlas
+   already reads `time,open,high,low,close`, so it drops in. *(Unblocks Phase B.)*
+2. **LLM agent runtime → in-session.** LLM agents run inside Claude Code
+   sessions, human in the loop — cheap, auditable, matches current workflow.
+   No always-on service in v1. *(Sets Phase E architecture.)*
+3. **Autonomy ceiling → L4 (sandbox self-queuing).** Atlas may eventually queue
+   and prioritise its *own* experiments within a sandbox, with periodic human
+   review. **Implication (important & honest):** autonomous testing burns the
+   out-of-sample budget far faster than manual testing, so the **multiple-testing
+   ledger + OOS budget + pre-registration hash-lock become non-optional
+   prerequisites** for L4 — they must exist and be proven at L3 before L4 is ever
+   switched on. L4 is *earned*, never defaulted (V5 §17). The sandbox must be
+   hard-walled from any live path; PAPER→LIVE stays human-gated regardless.
+
+**Remaining (need answers before the relevant phase):**
+4. **Memory backend.** SQLite-only, or Postgres from the start? *(Default:
+   SQLite; revisit at scale. Not blocking until Phase D.)*
 5. **OOS budget policy.** How many hypotheses may share one out-of-sample set
    before it is "burned" and must be refreshed with new data? *(Needed to make
-   anti-overfitting enforceable.)*
+   L4 autonomy safe; decide during Phase D.)*
 6. **Execution realism target.** Which broker/account model should slippage +
-   costs mirror, given the account may change? *(Affects realism config defaults.)*
+   costs mirror, given the account may change? *(Affects realism defaults;
+   decide during Phase A slippage work.)*
 
 ---
 
