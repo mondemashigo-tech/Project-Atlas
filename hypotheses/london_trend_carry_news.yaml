@@ -1,0 +1,67 @@
+# EXAMPLE hypothesis (not frozen) showing the Phase 4 data-source filters:
+#   carry       -> only trade in the direction of the rate differential
+#   news_filter -> blackout entries around high-impact scheduled events
+# Requires datasets/rates.csv (time,currency,rate) and
+# datasets/calendar.csv (time,currency,impact) alongside the price CSVs.
+name: london_trend_carry_news
+version: "0.1"
+template: trend_continuation
+
+markets: [GBPUSD, USDJPY]
+
+timeframes:
+  bias: H1
+  entry: M5
+
+session:
+  start: "08:00"
+  end: "11:00"
+  tz: "Europe/London"
+
+weekdays: [1, 2, 3]
+
+trend:
+  ema_fast: 50
+  ema_slow: 200
+
+entry:
+  pullback_ema: 20
+  confirmation: candle
+
+risk:
+  stop:
+    type: atr
+    atr_mult: 1.0
+    atr_period: 14
+    swing_lookback: 20
+  target_r: 2.0
+  max_trades_per_day: 3
+
+costs:
+  spread_pips: 1.0
+  commission_r: 0.03
+
+# ---- Phase 4 data sources ----
+carry:
+  require_aligned: true      # long the higher-yielding currency only
+
+news_filter:
+  enabled: true
+  block_minutes_before: 30
+  block_minutes_after: 30
+  min_impact: high           # low | medium | high
+
+criteria:
+  success:
+    profit_factor: 1.5
+    min_trades: 150
+    max_drawdown_pct: 10
+    expectancy: positive
+  failure:
+    profit_factor: 1.2
+    expectancy: negative
+    max_drawdown_pct: 15
+
+data:
+  in_sample: ["2023-01-01", "2024-12-31"]
+  out_sample: ["2025-01-01", "2025-12-31"]

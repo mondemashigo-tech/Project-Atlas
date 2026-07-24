@@ -6,6 +6,7 @@ import os
 from typing import Dict
 
 from . import data as data_mod
+from . import datasources
 from . import splits
 from .strategies.base import Strategy
 from .backtester import run as run_bt, Trade
@@ -17,6 +18,7 @@ def _run_window(cfg, datasets_dir, window_slicer) -> Dict:
     spread = cfg.get("costs", {}).get("spread_pips", 1.0)
     commission_r = cfg.get("costs", {}).get("commission_r", 0.0)
     max_tpd = cfg["risk"].get("max_trades_per_day", 3)
+    context = datasources.build_context(cfg, datasets_dir)
 
     all_trades = []
     per_market = {}
@@ -32,7 +34,8 @@ def _run_window(cfg, datasets_dir, window_slicer) -> Dict:
             continue
         strat = Strategy.create(cfg)
         trades = run_bt(sym, df, strat, spread_pips=spread,
-                        commission_r=commission_r, max_trades_per_day=max_tpd)
+                        commission_r=commission_r, max_trades_per_day=max_tpd,
+                        context=context)
         per_market[sym] = compute(trades)
         all_trades.extend(trades)
     return {"metrics": compute(all_trades), "per_market": per_market,

@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from . import data as data_mod
+from . import datasources
 from .paramgrid import expand as _grid
 from .strategies.base import Strategy
 from .backtester import run as run_bt
@@ -41,7 +42,7 @@ def _time_edges(tmin: pd.Timestamp, tmax: pd.Timestamp, n_seg: int) -> List[pd.T
 
 
 def _bt_window(cfg_variant: dict, frames: Dict[str, pd.DataFrame],
-               lo: pd.Timestamp, hi: pd.Timestamp) -> list:
+               lo: pd.Timestamp, hi: pd.Timestamp, context: dict = None) -> list:
     spread = cfg_variant.get("costs", {}).get("spread_pips", 1.0)
     commission_r = cfg_variant.get("costs", {}).get("commission_r", 0.0)
     max_tpd = cfg_variant["risk"].get("max_trades_per_day", 3)
@@ -52,7 +53,8 @@ def _bt_window(cfg_variant: dict, frames: Dict[str, pd.DataFrame],
             continue
         strat = Strategy.create(cfg_variant)
         trades.extend(run_bt(sym, w, strat, spread_pips=spread,
-                             commission_r=commission_r, max_trades_per_day=max_tpd))
+                             commission_r=commission_r, max_trades_per_day=max_tpd,
+                             context=context))
     return trades
 
 
@@ -74,6 +76,7 @@ def walk_forward(cfg: dict, datasets_dir: str, folds: int = 5,
     tmax = max(df.index.max() for df in frames.values())
     edges = _time_edges(tmin, tmax, folds + 1)
     grid = _grid(cfg)
+    context = datasources.build_context(cfg, datasets_dir)
 
     fold_records, oos_all = [], []
     for t in range(folds):
@@ -83,14 +86,14 @@ def walk_forward(cfg: dict, datasets_dir: str, folds: int = 5,
         # Optimise on in-sample: best total R, disqualifying too-thin variants.
         best = None
         for overrides, variant in grid:
-            m = compute(_bt_window(variant, frames, is_lo, is_hi))
+            m = compute(_bt_window(variant, frames, is_lo, is_hi, context))
             enough = m.get("trades", 0) >= min_is_trades
             obj = m.get("total_r", 0.0) - (0.0 if enough else 1e6)
             if best is None or obj > best[0]:
                 best = (obj, overrides, variant, m)
         _, overrides, variant, is_m = best
 
-        oos_tr = _bt_window(variant, frames, oos_lo, oos_hi)
+        oos_tr = _bt_window(variant, frames, oos_lo, oos_hi, context)
         oos_m = compute(oos_tr)
         oos_all.extend(oos_tr)
         fold_records.append({

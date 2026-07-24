@@ -33,8 +33,8 @@ def _pip(symbol: str) -> float:
 
 def run(symbol: str, entry_df: pd.DataFrame, strategy: Strategy,
         spread_pips: float = 1.0, commission_r: float = 0.0,
-        max_trades_per_day: int = 3) -> List[Trade]:
-    strategy.prepare(entry_df)
+        max_trades_per_day: int = 3, context: dict = None) -> List[Trade]:
+    strategy.prepare(entry_df, symbol=symbol, context=context)
     pip = _pip(symbol)
     spread = spread_pips * pip
 

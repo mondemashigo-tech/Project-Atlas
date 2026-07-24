@@ -43,9 +43,18 @@ hypothesis.yaml  ->  load data  ->  split in/out-of-sample  ->  backtest
 | `atlas/backtester.py` | event loop, next-bar fill + spread, bar-by-bar SL/TP |
 | `atlas/metrics.py` | PF, expectancy, drawdown, Sharpe — all in R units |
 | `atlas/splits.py` | in-sample / out-of-sample separation |
+| `atlas/walkforward.py` | anchored walk-forward + optional param-grid optimisation |
+| `atlas/montecarlo.py` | bootstrap + shuffle resampling of the trade sequence |
+| `atlas/optimizer.py` | grid search (ranked IS, reported OOS, overfit-gap flag) |
+| `atlas/paramgrid.py` | shared parameter-grid expansion |
+| `atlas/journal.py` | append-only JSONL research log with config fingerprints |
+| `atlas/charts.py` | dependency-free inline SVG (equity curve, histogram) |
+| `atlas/dashboard.py` | self-contained tabbed HTML report (print-to-PDF ready) |
+| `atlas/datasources.py` | carry (rates) + economic-calendar loaders |
+| `atlas/filters.py` | carry-alignment and news-blackout entry filters |
 | `atlas/{config,report,runner,cli}.py` | load -> run -> judge -> report |
 | `hypotheses/` | pre-registered hypotheses (frozen thresholds) |
-| `tests/` | pipeline tests (synthetic data, no MT5 needed) |
+| `tests/` | pipeline + robustness + reporting + data-source tests (synthetic, no MT5) |
 
 ## Usage
 
@@ -72,8 +81,22 @@ pytest -q
 
 - **Phase 1 — spine**: backtest, metrics, verdicts, splits, CLI. ✅ Complete, tests passing.
 - **Phase 2 — robustness**: walk-forward analysis + Monte Carlo (bootstrap + shuffle). ✅ Complete, tests passing.
-- **Phase 3 — surface**: dashboard, HTML/PDF/CSV reports, trade journal, optimizer.
-- **Phase 4 — data**: rate differentials (carry), economic calendar (news filter).
+- **Phase 3 — surface**: optimiser, research journal, SVG charts, tabbed HTML dashboard. ✅ Complete, tests passing.
+- **Phase 4 — data**: carry (rate-differential) filter + economic-calendar news blackout. ✅ Complete, tests passing.
+
+### Data sources (Phase 4)
+
+Two optional, portable CSV sources sit alongside the price data and act as entry
+filters. A hypothesis that references neither behaves exactly as before.
+
+| File | Schema | Effect |
+|---|---|---|
+| `datasets/rates.csv` | `time, currency, rate` | With `carry: {require_aligned: true}`, only take trades aligned with the pair's rate differential (long the higher-yielding currency). Missing data → abstain, never guess. |
+| `datasets/calendar.csv` | `time, currency, impact` | With `news_filter: {enabled: true, ...}`, block entries inside a blackout window around high-impact events for either currency of the pair. |
+
+See `hypotheses/london_trend_carry_news.yaml` for the config. Both filters are
+look-ahead safe (rates use as-of lookup; the calendar blocks a symmetric window
+around the event time).
 
 ### Robustness, in one paragraph
 

@@ -18,10 +18,19 @@ from .base import Strategy, Signal
 class TrendContinuation(Strategy):
     name = "trend_continuation"
 
-    def prepare(self, entry_df: pd.DataFrame) -> None:
+    def prepare(self, entry_df: pd.DataFrame, symbol: str = None,
+                context: dict = None) -> None:
         c = self.config
         self.df = entry_df
+        self.symbol = symbol
         px = entry_df["close"]
+
+        # Optional Phase 4 filters (carry / news). Built only if the hypothesis
+        # enables them and a symbol is known; otherwise both stay None.
+        self.carry_filter = self.news_filter = None
+        if symbol and (c.get("carry") or c.get("news_filter")):
+            from ..filters import build as build_filters
+            self.carry_filter, self.news_filter = build_filters(c, context, symbol)
 
         # Entry-TF pullback reference + confirmation inputs.
         self.ema_pull = ema(px, c["entry"]["pullback_ema"])
@@ -54,6 +63,15 @@ class TrendContinuation(Strategy):
         allowed = set(c.get("weekdays", [0, 1, 2, 3, 4]))
         self.tradeable = in_sess & wd.isin(allowed)
 
+    def _filters_allow(self, direction: str, i: int) -> bool:
+        ts = self.df.index[i]
+        if self.news_filter is not None and self.news_filter.blocks(ts):
+            return False
+        if self.carry_filter is not None and \
+                not self.carry_filter.allows(self.symbol, direction, ts):
+            return False
+        return True
+
     def signal_at(self, i: int) -> Optional[Signal]:
         if i < 2 or not bool(self.tradeable.iloc[i]):
             return None
@@ -73,6 +91,8 @@ class TrendContinuation(Strategy):
 
         touched_ema = l <= ep <= h  # price pulled back to / through the fast EMA
         if trend == "BULL" and touched_ema and cl > o:
+            if not self._filters_allow("BUY", i):
+                return None
             swing = self.swing_lo.iloc[i]
             stop = min(swing if not pd.isna(swing) else cl - stop_mult * a,
                        cl - stop_mult * a)
@@ -81,6 +101,8 @@ class TrendContinuation(Strategy):
                 return None
             return Signal("BUY", cl, stop, cl + target_r * r, "bull pullback+confirm")
         if trend == "BEAR" and touched_ema and cl < o:
+            if not self._filters_allow("SELL", i):
+                return None
             swing = self.swing_hi.iloc[i]
             stop = max(swing if not pd.isna(swing) else cl + stop_mult * a,
                        cl + stop_mult * a)

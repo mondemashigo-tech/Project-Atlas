@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Dict
 
 from . import data as data_mod
+from . import datasources
 from . import splits
 from .paramgrid import expand
 from .strategies.base import Strategy
@@ -18,7 +19,7 @@ from .backtester import run as run_bt
 from .metrics import compute
 
 
-def _bt(cfg: dict, datasets_dir: str, slicer) -> list:
+def _bt(cfg: dict, datasets_dir: str, slicer, context: dict = None) -> list:
     entry_tf = cfg["timeframes"]["entry"]
     spread = cfg.get("costs", {}).get("spread_pips", 1.0)
     commission_r = cfg.get("costs", {}).get("commission_r", 0.0)
@@ -34,16 +35,18 @@ def _bt(cfg: dict, datasets_dir: str, slicer) -> list:
             continue
         strat = Strategy.create(cfg)
         trades.extend(run_bt(sym, w, strat, spread_pips=spread,
-                             commission_r=commission_r, max_trades_per_day=max_tpd))
+                             commission_r=commission_r, max_trades_per_day=max_tpd,
+                             context=context))
     return trades
 
 
 def optimize(cfg: dict, datasets_dir: str, objective: str = "total_r",
              min_trades: int = 30) -> Dict:
+    context = datasources.build_context(cfg, datasets_dir)
     rows = []
     for overrides, variant in expand(cfg):
-        is_m = compute(_bt(variant, datasets_dir, splits.in_sample))
-        oos_m = compute(_bt(variant, datasets_dir, splits.out_sample))
+        is_m = compute(_bt(variant, datasets_dir, splits.in_sample, context))
+        oos_m = compute(_bt(variant, datasets_dir, splits.out_sample, context))
         rows.append({"params": overrides, "is": is_m, "oos": oos_m})
 
     def rank_key(r):

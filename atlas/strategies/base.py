@@ -26,8 +26,11 @@ class Strategy:
     def __init__(self, config: dict):
         self.config = config
 
-    def prepare(self, entry_df: pd.DataFrame) -> None:
-        """Precompute indicator columns on the entry-timeframe frame."""
+    def prepare(self, entry_df: pd.DataFrame, symbol: str = None,
+                context: dict = None) -> None:
+        """Precompute indicator columns on the entry-timeframe frame. `symbol`
+        and `context` (loaded external data sources) are optional and only used
+        by strategies that apply carry / news filters."""
         raise NotImplementedError
 
     def signal_at(self, i: int) -> Optional[Signal]:
