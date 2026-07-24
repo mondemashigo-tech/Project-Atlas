@@ -45,23 +45,50 @@ def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     return out.dropna()
 
 
+_TF_MINUTES = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 60, "H4": 240, "D1": 1440}
+
+
 def export_from_mt5(symbol: str, timeframe: str, years: float, out_dir: str) -> str:
-    """Run on a machine with MetaTrader5 to produce a dataset CSV. Returns path."""
-    import datetime as dt
+    """Run on a machine with MetaTrader5 to produce a dataset CSV. Returns path.
+
+    Mirrors the live bot's access pattern: select the symbol into Market Watch
+    first (MT5 returns no history for an unselected symbol), then pull recent
+    bars with copy_rates_from_pos, which is more reliable than a date range.
+
+    NOTE on time: MT5 timestamps are the *broker server* clock stored as epoch
+    seconds. If the server is not UTC, session filters are offset by the broker's
+    UTC offset — calibrate `session` accordingly (see README).
+    """
     import MetaTrader5 as mt5  # noqa: import guarded to keep the platform portable
 
     tf_map = {"M1": mt5.TIMEFRAME_M1, "M5": mt5.TIMEFRAME_M5, "M15": mt5.TIMEFRAME_M15,
-              "H1": mt5.TIMEFRAME_H1, "H4": mt5.TIMEFRAME_H4, "D1": mt5.TIMEFRAME_D1}
+              "M30": mt5.TIMEFRAME_M30, "H1": mt5.TIMEFRAME_H1, "H4": mt5.TIMEFRAME_H4,
+              "D1": mt5.TIMEFRAME_D1}
+    tf = timeframe.upper()
+    if tf not in tf_map:
+        raise ValueError(f"Unknown timeframe {timeframe!r}. Known: {list(tf_map)}")
     if not mt5.initialize():
         raise RuntimeError(f"MT5 init failed: {mt5.last_error()}")
-    end = dt.datetime.now()
-    start = end - dt.timedelta(days=int(years * 365))
-    rates = mt5.copy_rates_range(symbol, tf_map[timeframe.upper()], start, end)
-    mt5.shutdown()
+    try:
+        if not mt5.symbol_select(symbol, True):
+            raise RuntimeError(
+                f"Could not select '{symbol}' in Market Watch (last_error="
+                f"{mt5.last_error()}). Check the exact symbol name in your terminal.")
+        # Enough bars to cover the requested span; the broker returns what it has.
+        bars = int(years * 365 * 24 * 60 / _TF_MINUTES[tf]) + 100
+        rates = mt5.copy_rates_from_pos(symbol, tf_map[tf], 0, bars)
+        if (rates is None or len(rates) == 0):   # fall back to a date range
+            import datetime as dt
+            end = dt.datetime.now()
+            start = end - dt.timedelta(days=int(years * 365) + 1)
+            rates = mt5.copy_rates_range(symbol, tf_map[tf], start, end)
+    finally:
+        mt5.shutdown()
     if rates is None or len(rates) == 0:
-        raise RuntimeError(f"No {symbol} {timeframe} history returned.")
+        raise RuntimeError(f"No {symbol} {tf} history returned (broker may not "
+                           f"serve this depth; try fewer years).")
     df = pd.DataFrame(rates)[["time", "open", "high", "low", "close"]]
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"{symbol.upper()}_{timeframe.upper()}.csv")
+    path = os.path.join(out_dir, f"{symbol.upper()}_{tf}.csv")
     df.to_csv(path, index=False)
     return path
