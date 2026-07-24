@@ -13,7 +13,7 @@ import sqlite3
 from typing import List, Optional
 
 from ..schemas import (ExperimentRecord, DecisionRecord, Hypothesis,
-                       KnowledgeNote)
+                       KnowledgeNote, DataSnapshot)
 
 
 class MemoryStore:
@@ -40,6 +40,8 @@ class MemoryStore:
             phase TEXT, decision TEXT, json TEXT, created_at TEXT);
         CREATE TABLE IF NOT EXISTS knowledge (
             id TEXT PRIMARY KEY, title TEXT, tags TEXT, json TEXT, created_at TEXT);
+        CREATE TABLE IF NOT EXISTS snapshots (
+            id TEXT PRIMARY KEY, source TEXT, content_hash TEXT, json TEXT, created_at TEXT);
         """)
         c.commit()
 
@@ -104,6 +106,31 @@ class MemoryStore:
         else:
             rows = self._conn.execute("SELECT json FROM decisions ORDER BY id").fetchall()
         return [DecisionRecord.from_dict(json.loads(r["json"])) for r in rows]
+
+    # ---- snapshots ---------------------------------------------------------
+    def get_snapshot_by_hash(self, source: str, chash: str) -> Optional[DataSnapshot]:
+        row = self._conn.execute(
+            "SELECT json FROM snapshots WHERE source=? AND content_hash=?",
+            (source, chash)).fetchone()
+        return DataSnapshot.from_dict(json.loads(row["json"])) if row else None
+
+    def write_snapshot(self, snap: DataSnapshot) -> DataSnapshot:
+        """Store a snapshot, reusing an existing one with the same source+hash so
+        identical data maps to one stable id (deduplication for provenance)."""
+        existing = self.get_snapshot_by_hash(snap.source, snap.content_hash)
+        if existing:
+            return existing
+        self._conn.execute(
+            "INSERT INTO snapshots VALUES (?,?,?,?,?)",
+            (snap.id, snap.source, snap.content_hash,
+             json.dumps(snap.to_dict()), snap.created_at))
+        self._conn.commit()
+        return snap
+
+    def get_snapshot(self, sid: str) -> Optional[DataSnapshot]:
+        row = self._conn.execute(
+            "SELECT json FROM snapshots WHERE id=?", (sid,)).fetchone()
+        return DataSnapshot.from_dict(json.loads(row["json"])) if row else None
 
     # ---- knowledge ---------------------------------------------------------
     def write_knowledge(self, note: KnowledgeNote) -> KnowledgeNote:

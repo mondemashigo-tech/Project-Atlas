@@ -15,6 +15,9 @@ import sys
 from .. import service
 from ..memory import MemoryStore
 from ..registry import Registry, BotStub
+from ..snapshots import make_snapshot
+from ..research.fx import histdata as fx_histdata
+from ..research.fx import regime as fx_regime
 
 
 def _run(args):
@@ -69,6 +72,34 @@ def _bot(args):
         reg.close()
 
 
+def _regime(args):
+    report = service.regime_report(args.hypothesis, root=args.root, window=args.window)
+    if not report:
+        print("no trades / no data")
+        return
+    for sym, bd in report.items():
+        print(f"\n[{sym}]")
+        print(fx_regime.render(bd), end="")
+
+
+def _data(args):
+    import os as _os
+    ds = _os.path.join(args.root, "datasets")
+    if args.action == "import-histdata":
+        path = fx_histdata.import_histdata(args.paths, ds, args.symbol)
+        print(f"imported -> {path}")
+    elif args.action == "snapshot":
+        snap = make_snapshot(ds, args.symbols, args.timeframe,
+                             source=f"datasets:{_os.path.abspath(ds)}")
+        store = MemoryStore(args.root)
+        try:
+            snap = store.write_snapshot(snap)
+        finally:
+            store.close()
+        print(f"snapshot {snap.id}  symbols={snap.symbols}  rows={snap.row_count}")
+        print(f"  span {snap.span[0]} -> {snap.span[1]}  hash={snap.content_hash}")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="atlas")
     p.add_argument("--root", default=".", help="Atlas data root (db + vault + datasets)")
@@ -90,6 +121,20 @@ def main(argv=None):
 
     b = sub.add_parser("bot", help="what the stub executor WOULD run (no orders)")
     b.set_defaults(func=_bot)
+
+    rg2 = sub.add_parser("regime", help="per-regime performance breakdown of a hypothesis")
+    rg2.add_argument("hypothesis")
+    rg2.add_argument("--window", default="full",
+                     choices=["out_sample", "in_sample", "full"])
+    rg2.set_defaults(func=_regime)
+
+    dp = sub.add_parser("data", help="data foundation: import HistData, take snapshots")
+    dp.add_argument("action", choices=["import-histdata", "snapshot"])
+    dp.add_argument("--symbol", help="symbol for import-histdata (e.g. GBPUSD)")
+    dp.add_argument("--paths", nargs="+", help="HistData .csv/.zip files or a glob")
+    dp.add_argument("--symbols", nargs="+", help="symbols for snapshot")
+    dp.add_argument("--timeframe", default="M5", help="timeframe for snapshot")
+    dp.set_defaults(func=_data)
 
     args = p.parse_args(argv)
     return args.func(args)

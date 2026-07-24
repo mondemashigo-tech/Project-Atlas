@@ -16,6 +16,7 @@ from .research.fx.metrics import verdict as fx_verdict
 from .schemas import (Hypothesis, ExperimentRecord, new_id,
                       ATLAS_ENGINE_VERSION)
 from .memory import MemoryStore
+from .snapshots import make_snapshot
 
 
 def run_experiment(hyp_path: str, root: str = ".", window: str = "out_sample",
@@ -30,6 +31,12 @@ def run_experiment(hyp_path: str, root: str = ".", window: str = "out_sample",
     try:
         store.write_hypothesis(hyp)
         datasets = os.path.join(root, "datasets")
+
+        # Provenance: snapshot the exact data this experiment sees.
+        snap = make_snapshot(datasets, cfg["markets"], cfg["timeframes"]["entry"],
+                             source=f"datasets:{os.path.abspath(datasets)}")
+        snap = store.write_snapshot(snap)
+
         results = fx_runner.run_hypothesis(cfg, datasets)
         m = results[window]["metrics"]
         v = fx_verdict(m, cfg.get("criteria", {}))
@@ -39,7 +46,7 @@ def run_experiment(hyp_path: str, root: str = ".", window: str = "out_sample",
             hypothesis_id=hyp.id,
             hypothesis_version=hyp.version,
             engine_version=ATLAS_ENGINE_VERSION,
-            data_snapshot_id=None,          # wired in Milestone 2 (DataSnapshot)
+            data_snapshot_id=snap.id,
             window=window,
             metrics=m,
             verdict=v.get("result"),
@@ -49,3 +56,38 @@ def run_experiment(hyp_path: str, root: str = ".", window: str = "out_sample",
         return hyp, rec, v
     finally:
         store.close()
+
+
+def regime_report(hyp_path: str, root: str = ".", window: str = "full") -> dict:
+    """Per-symbol performance bucketed by market regime at entry (Volume 3 §12).
+    Returns {symbol: {regime_label: metrics}}."""
+    from .research.fx.strategies.base import Strategy
+    from .research.fx.backtester import run as run_bt
+    from .research.fx import data as fx_data, splits as fx_splits
+    from .research.fx import regime as fx_regime, datasources
+
+    cfg = fx_config.load(hyp_path)
+    datasets = os.path.join(root, "datasets")
+    entry_tf = cfg["timeframes"]["entry"]
+    context = datasources.build_context(cfg, datasets)
+    spread = cfg.get("costs", {}).get("spread_pips", 1.0)
+    comm = cfg.get("costs", {}).get("commission_r", 0.0)
+    mtpd = cfg["risk"].get("max_trades_per_day", 3)
+
+    out = {}
+    for sym in cfg["markets"]:
+        try:
+            df = fx_data.load_symbol(datasets, sym, entry_tf)
+        except FileNotFoundError:
+            continue
+        if window == "in_sample":
+            df = fx_splits.in_sample(df, cfg)
+        elif window == "out_sample":
+            df = fx_splits.out_sample(df, cfg)
+        if len(df) < 300:
+            continue
+        strat = Strategy.create(cfg)
+        trades = run_bt(sym, df, strat, spread_pips=spread, commission_r=comm,
+                        max_trades_per_day=mtpd, context=context)
+        out[sym] = fx_regime.breakdown(trades, df)
+    return out
