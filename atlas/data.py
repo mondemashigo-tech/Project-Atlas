@@ -64,8 +64,18 @@ def mt5_diagnostics(symbols) -> dict:
                             "company": ai.company, "currency": ai.currency}
                            if ai else None),
                "symbols_total": mt5.symbols_total(),
+               "server_utc_offset_hours": None,
                "requested": {}}
         allsyms = mt5.symbols_get() or []
+        # Measure the broker's server-time offset from UTC: a fresh tick's time
+        # is server-clock epoch; compare to real UTC now. Round to the hour.
+        import time as _time
+        for s in symbols:
+            mt5.symbol_select(s, True)
+            tk = mt5.symbol_info_tick(s)
+            if tk and tk.time:
+                out["server_utc_offset_hours"] = round((tk.time - _time.time()) / 3600)
+                break
         for s in symbols:
             key = s.upper()[:6]
             matches = sorted({x.name for x in allsyms if key in x.name.upper()})

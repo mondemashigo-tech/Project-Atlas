@@ -32,8 +32,14 @@ def _journal_path(args):
     return os.path.join(args.reports, "journal.jsonl")
 
 
+def _apply_tz(cfg, args):
+    if getattr(args, "data_utc_offset", 0):
+        cfg.setdefault("session", {})["data_utc_offset"] = args.data_utc_offset
+
+
 def _run(args):
     cfg = config_mod.load(args.hypothesis)
+    _apply_tz(cfg, args)
     results = runner.run_hypothesis(cfg, args.datasets)
     text = report_mod.render(cfg, results)
     mc = None
@@ -78,6 +84,7 @@ def _wf(args):
 
 def _mc(args):
     cfg = config_mod.load(args.hypothesis)
+    _apply_tz(cfg, args)
     if args.window == "full":
         trades = runner.run_full(cfg, args.datasets)["trades"]
     else:
@@ -141,6 +148,10 @@ def _mt5check(args):
     print(f"account: login {a.get('login')} | server {a.get('server')} | "
           f"{a.get('company')} | {a.get('currency')}")
     print(f"symbols available in terminal: {d['symbols_total']}")
+    off = d.get("server_utc_offset_hours")
+    if off is not None:
+        print(f"broker server UTC offset  : {off:+d}h  "
+              f"(pass --data-utc-offset {off} to 'run' so sessions align to real UTC)")
     for s, info in d["requested"].items():
         print(f"\n{s}:")
         print(f"  exact name selected : {info['exact_selected']}")
@@ -160,6 +171,8 @@ def main(argv=None):
     r.add_argument("hypothesis")
     r.add_argument("--mc", action="store_true", help="append Monte Carlo on OOS trades")
     r.add_argument("--html", action="store_true", help="also write the HTML dashboard")
+    r.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset",
+                   help="hours to subtract from data timestamps (broker server time -> UTC)")
     r.set_defaults(func=_run)
 
     w = sub.add_parser("wf", help="walk-forward analysis")
@@ -173,6 +186,7 @@ def main(argv=None):
     m.add_argument("--sims", type=int, default=5000)
     m.add_argument("--window", choices=["out_sample", "in_sample", "full"],
                    default="out_sample")
+    m.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset")
     m.set_defaults(func=_mc)
 
     o = sub.add_parser("opt", help="grid-search optimiser (IS ranked, OOS reported)")

@@ -53,9 +53,13 @@ class TrendContinuation(Strategy):
         # shift(1): an entry bar may only use bias bars that have fully closed.
         self.trend = trend.shift(1).reindex(entry_df.index, method="ffill").fillna("NONE")
 
-        # Session / weekday mask on the entry index (index is UTC).
+        # Session / weekday mask on the entry index. If the data is stamped in
+        # broker-server time (not true UTC), data_utc_offset (hours) shifts it
+        # back to real UTC before converting to the session's wall clock.
         tz = c["session"].get("tz", "UTC")
-        local = entry_df.index.tz_convert(tz)
+        data_offset = c["session"].get("data_utc_offset", 0)
+        true_utc = entry_df.index - pd.Timedelta(hours=data_offset)
+        local = true_utc.tz_convert(tz)
         start = pd.to_datetime(c["session"]["start"]).time()
         end = pd.to_datetime(c["session"]["end"]).time()
         in_sess = pd.Series([start <= t.time() < end for t in local], index=entry_df.index)
