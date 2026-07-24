@@ -20,42 +20,16 @@ Two headline numbers:
 """
 from __future__ import annotations
 
-import copy
-import itertools
 from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 
 from . import data as data_mod
+from .paramgrid import expand as _grid
 from .strategies.base import Strategy
 from .backtester import run as run_bt
 from .metrics import compute
-
-
-def _set_path(d: dict, dotted: str, value) -> None:
-    keys = dotted.split(".")
-    cur = d
-    for k in keys[:-1]:
-        cur = cur.setdefault(k, {})
-    cur[keys[-1]] = value
-
-
-def _grid(cfg: dict):
-    """Yield (overrides_dict, variant_cfg) for every point in the optimize grid.
-    No optimize section -> a single point with the config as-is."""
-    opt = cfg.get("optimize") or {}
-    if not opt:
-        return [({}, cfg)]
-    keys = list(opt.keys())
-    out = []
-    for combo in itertools.product(*[opt[k] for k in keys]):
-        overrides = dict(zip(keys, combo))
-        variant = copy.deepcopy(cfg)
-        for path, val in overrides.items():
-            _set_path(variant, path, val)
-        out.append((overrides, variant))
-    return out
 
 
 def _time_edges(tmin: pd.Timestamp, tmax: pd.Timestamp, n_seg: int) -> List[pd.Timestamp]:
