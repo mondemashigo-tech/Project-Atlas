@@ -39,7 +39,7 @@ hypothesis.yaml  ->  load data  ->  split in/out-of-sample  ->  backtest
 |---|---|
 | `atlas/indicators.py` | ema, atr, rsi, swing high/low (pure vectorized) |
 | `atlas/data.py` | portable CSV loader + resampler (not tied to live MT5) |
-| `atlas/strategies/` | config-driven strategy registry + templates |
+| `atlas/strategies/` | config-driven registry + templates: `trend_continuation` (pullback), `mean_reversion` (z-score fade), `breakout` (Donchian channel) |
 | `atlas/backtester.py` | event loop, next-bar fill + spread, bar-by-bar SL/TP |
 | `atlas/metrics.py` | PF, expectancy, drawdown, Sharpe — all in R units |
 | `atlas/splits.py` | in-sample / out-of-sample separation |

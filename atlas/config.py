@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import yaml
 
-REQUIRED = ["name", "markets", "timeframes", "session", "trend", "entry",
-            "risk", "criteria", "data"]
+# Core keys every hypothesis needs. Strategy-specific blocks (trend, entry,
+# meanrev, breakout, ...) are validated by each template, not here.
+REQUIRED = ["name", "markets", "timeframes", "risk", "criteria", "data"]
 
 
 def load(path: str) -> dict:
@@ -14,9 +15,8 @@ def load(path: str) -> dict:
     missing = [k for k in REQUIRED if k not in cfg]
     if missing:
         raise ValueError(f"{path}: missing required keys {missing}")
-    for tf in ("bias", "entry"):
-        if tf not in cfg["timeframes"]:
-            raise ValueError(f"{path}: timeframes.{tf} is required")
+    if "entry" not in cfg["timeframes"]:
+        raise ValueError(f"{path}: timeframes.entry is required")
     for win in ("in_sample", "out_sample"):
         if win not in cfg["data"] or len(cfg["data"][win]) != 2:
             raise ValueError(f"{path}: data.{win} must be [start, end]")

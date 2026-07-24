@@ -1,0 +1,43 @@
+# PRE-REGISTERED — frozen. Donchian channel breakout (momentum).
+# Split matches the only real data we have (OctaFX M5, 2025-03 -> 2026-07):
+# a PASS here is PRELIMINARY (one regime) and earns a test on deeper data, not
+# a live trade.
+name: donchian_breakout
+version: "1.0"
+template: breakout
+
+markets: [GBPUSD, USDJPY]
+
+timeframes:
+  entry: M5
+
+weekdays: [0, 1, 2, 3, 4]   # all-day, so robust to broker-time offset
+
+breakout:
+  channel: 20           # break the 20-bar high/low formed before this bar
+
+risk:
+  stop:
+    type: atr
+    atr_mult: 1.0
+    atr_period: 14
+  target_r: 2.0
+  max_trades_per_day: 3
+
+costs:
+  spread_pips: 1.0
+  commission_r: 0.03
+
+criteria:
+  success:
+    profit_factor: 1.3
+    min_trades: 150
+    max_drawdown_pct: 15
+    expectancy: positive
+  failure:
+    profit_factor: 1.0
+    expectancy: negative
+
+data:
+  in_sample: ["2025-03-21", "2026-01-31"]
+  out_sample: ["2026-02-01", "2026-07-31"]
