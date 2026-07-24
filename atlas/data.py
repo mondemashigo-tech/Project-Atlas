@@ -108,19 +108,27 @@ def export_from_mt5(symbol: str, timeframe: str, years: float, out_dir: str) -> 
         raise ValueError(f"Unknown timeframe {timeframe!r}. Known: {list(tf_map)}")
     if not mt5.initialize():
         raise RuntimeError(f"MT5 init failed: {mt5.last_error()}")
+    import datetime as dt
+    import time
     try:
         if not mt5.symbol_select(symbol, True):
             raise RuntimeError(
                 f"Could not select '{symbol}' in Market Watch (last_error="
                 f"{mt5.last_error()}). Check the exact symbol name in your terminal.")
-        # Enough bars to cover the requested span; the broker returns what it has.
         bars = int(years * 365 * 24 * 60 / _TF_MINUTES[tf]) + 100
-        rates = mt5.copy_rates_from_pos(symbol, tf_map[tf], 0, bars)
-        if (rates is None or len(rates) == 0):   # fall back to a date range
-            import datetime as dt
-            end = dt.datetime.now()
-            start = end - dt.timedelta(days=int(years * 365) + 1)
+        end = dt.datetime.now()
+        start = end - dt.timedelta(days=int(years * 365) + 2)
+        # A fresh terminal may need a few seconds to pull history from the server;
+        # the first call kicks off the download and can return empty. Retry.
+        rates = None
+        for attempt in range(15):
             rates = mt5.copy_rates_range(symbol, tf_map[tf], start, end)
+            if rates is not None and len(rates):
+                break
+            rates = mt5.copy_rates_from_pos(symbol, tf_map[tf], 0, bars)
+            if rates is not None and len(rates):
+                break
+            time.sleep(2)
     finally:
         mt5.shutdown()
     if rates is None or len(rates) == 0:
