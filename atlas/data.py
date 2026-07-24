@@ -48,6 +48,45 @@ def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
 _TF_MINUTES = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 60, "H4": 240, "D1": 1440}
 
 
+def mt5_diagnostics(symbols) -> dict:
+    """Report which account/terminal is connected, the real symbol names that
+    match what was asked for, and how many M5 bars are actually available. Use
+    this when export returns no history — it tells us whether the problem is a
+    wrong symbol name or history that hasn't downloaded yet."""
+    import MetaTrader5 as mt5  # noqa
+
+    if not mt5.initialize():
+        return {"ok": False, "error": f"MT5 init failed: {mt5.last_error()}"}
+    try:
+        ai = mt5.account_info()
+        out = {"ok": True,
+               "account": ({"login": ai.login, "server": ai.server,
+                            "company": ai.company, "currency": ai.currency}
+                           if ai else None),
+               "symbols_total": mt5.symbols_total(),
+               "requested": {}}
+        allsyms = mt5.symbols_get() or []
+        for s in symbols:
+            key = s.upper()[:6]
+            matches = sorted({x.name for x in allsyms if key in x.name.upper()})
+            sel = mt5.symbol_select(s, True)
+            bars = 0
+            first = last = None
+            if sel:
+                r = mt5.copy_rates_from_pos(s, mt5.TIMEFRAME_M5, 0, 500000)
+                if r is not None and len(r):
+                    bars = len(r)
+                    import datetime as dt
+                    first = str(dt.datetime.utcfromtimestamp(int(r[0]["time"])))
+                    last = str(dt.datetime.utcfromtimestamp(int(r[-1]["time"])))
+            out["requested"][s] = {"exact_selected": bool(sel), "m5_bars": bars,
+                                   "first": first, "last": last,
+                                   "name_matches": matches[:25]}
+        return out
+    finally:
+        mt5.shutdown()
+
+
 def export_from_mt5(symbol: str, timeframe: str, years: float, out_dir: str) -> str:
     """Run on a machine with MetaTrader5 to produce a dataset CSV. Returns path.
 

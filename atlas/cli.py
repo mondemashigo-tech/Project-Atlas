@@ -132,6 +132,24 @@ def _export(args):
     print(f"exported -> {path}")
 
 
+def _mt5check(args):
+    d = data_mod.mt5_diagnostics(args.symbols)
+    if not d.get("ok"):
+        print("MT5 NOT CONNECTED:", d.get("error"))
+        return
+    a = d["account"] or {}
+    print(f"account: login {a.get('login')} | server {a.get('server')} | "
+          f"{a.get('company')} | {a.get('currency')}")
+    print(f"symbols available in terminal: {d['symbols_total']}")
+    for s, info in d["requested"].items():
+        print(f"\n{s}:")
+        print(f"  exact name selected : {info['exact_selected']}")
+        print(f"  M5 bars available   : {info['m5_bars']}")
+        if info["m5_bars"]:
+            print(f"  range               : {info['first']}  ->  {info['last']}")
+        print(f"  name matches ('{s[:6]}'): {info['name_matches'] or 'NONE'}")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="atlas")
     p.add_argument("--datasets", default="datasets")
@@ -175,6 +193,10 @@ def main(argv=None):
     e.add_argument("symbol"); e.add_argument("timeframe")
     e.add_argument("years", type=float, nargs="?", default=3.0)
     e.set_defaults(func=_export)
+
+    ck = sub.add_parser("mt5check", help="diagnose MT5 connection, symbols, history")
+    ck.add_argument("symbols", nargs="+")
+    ck.set_defaults(func=_mt5check)
 
     args = p.parse_args(argv)
     return args.func(args)
