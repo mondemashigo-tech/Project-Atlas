@@ -7,6 +7,8 @@ from .reporter import Reporter
 from .statistician import Statistician
 from .historian import Historian
 from .architect import Architect
+from .librarian import Librarian
+from .scientist import Scientist
 
 __all__ = ["Agent", "AgentContext", "Skeptic", "Reporter", "Statistician",
-           "Historian", "Architect"]
+           "Historian", "Architect", "Librarian", "Scientist"]

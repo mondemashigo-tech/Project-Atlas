@@ -117,6 +117,31 @@ def _governance(args):
         store.close()
 
 
+def _ingest(args):
+    from ..agents import Librarian
+    store = MemoryStore(args.root)
+    try:
+        notes = Librarian().ingest(args.path, store)
+        for n in notes:
+            print(f"{n.id}  {n.title}  tags={n.topic_tags}")
+        print(f"ingested {len(notes)} note(s) into {args.root}/vault/knowledge/")
+    finally:
+        store.close()
+
+
+def _propose(args):
+    from ..agents import Scientist
+    from ..research.fx import config as fx_config
+    base = fx_config.load(args.base)
+    store = MemoryStore(args.root)
+    try:
+        sci = Scientist()
+        scored = sci.prioritise(sci.propose(base), store)
+        print(sci.render(scored), end="")
+    finally:
+        store.close()
+
+
 def _architect(args):
     from ..agents import Architect
     store = MemoryStore(args.root)
@@ -197,6 +222,14 @@ def main(argv=None):
 
     ar = sub.add_parser("architect", help="lab health + structural suggestions")
     ar.set_defaults(func=_architect)
+
+    ig = sub.add_parser("ingest", help="Librarian: ingest a file/dir into knowledge")
+    ig.add_argument("path")
+    ig.set_defaults(func=_ingest)
+
+    pr = sub.add_parser("propose", help="Scientist: propose + rank hypothesis variants")
+    pr.add_argument("base", help="base hypothesis YAML")
+    pr.set_defaults(func=_propose)
 
     co = sub.add_parser("council", help="run the decision ladder (orchestrator + agents)")
     co.add_argument("hypothesis")
