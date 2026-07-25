@@ -30,6 +30,27 @@ def test_histdata_import_est_to_utc():
         assert abs(df["close"].iloc[0] - 1.20010) < 1e-9
 
 
+def test_histdata_import_then_resample_to_m5():
+    with tempfile.TemporaryDirectory() as d:
+        raw = os.path.join(d, "hd.csv")
+        rows = []
+        base = pd.Timestamp("2023-01-03 09:30")
+        for i in range(60):                       # 60 M1 bars
+            t = (base + pd.Timedelta(minutes=i)).strftime("%Y%m%d %H%M%S")
+            rows.append(f"{t};1.20000;1.20050;1.19990;1.20010;0")
+        with open(raw, "w") as f:
+            f.write("\n".join(rows) + "\n")
+        datasets = os.path.join(d, "datasets")
+        histdata.import_histdata(raw, datasets, "GBPUSD")
+        from atlas.research.fx.data import load_csv, resample
+        m1 = load_csv(os.path.join(datasets, "GBPUSD_M1.csv"))
+        r = resample(m1, "M5")
+        r.reset_index().to_csv(os.path.join(datasets, "GBPUSD_M5.csv"), index=False)
+        m5 = load_symbol(datasets, "GBPUSD", "M5")
+        assert len(m5) == 12                       # 60 M1 -> 12 M5
+        assert list(m5.columns) == ["open", "high", "low", "close"]
+
+
 def test_histdata_dedup_and_sort():
     with tempfile.TemporaryDirectory() as d:
         raw = os.path.join(d, "a.csv")

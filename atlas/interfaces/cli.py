@@ -206,10 +206,23 @@ def _regime(args):
 
 def _data(args):
     import os as _os
+    from ..research.fx.data import load_csv, resample
     ds = _os.path.join(args.root, "datasets")
     if args.action == "import-histdata":
         path = fx_histdata.import_histdata(args.paths, ds, args.symbol)
         print(f"imported -> {path}")
+        for tf in (args.resample or []):
+            r = resample(load_csv(path), tf)
+            outp = _os.path.join(ds, f"{args.symbol.upper()}_{tf.upper()}.csv")
+            r.reset_index().to_csv(outp, index=False)
+            print(f"resampled {len(r)} bars -> {outp}")
+    elif args.action == "resample":
+        src = _os.path.join(ds, f"{args.symbol.upper()}_{args.timeframe.upper()}.csv")
+        for tf in (args.resample or []):
+            r = resample(load_csv(src), tf)
+            outp = _os.path.join(ds, f"{args.symbol.upper()}_{tf.upper()}.csv")
+            r.reset_index().to_csv(outp, index=False)
+            print(f"resampled {len(r)} bars -> {outp}")
     elif args.action == "snapshot":
         snap = make_snapshot(ds, args.symbols, args.timeframe,
                              source=f"datasets:{_os.path.abspath(ds)}")
@@ -291,12 +304,15 @@ def main(argv=None):
                      choices=["out_sample", "in_sample", "full"])
     rg2.set_defaults(func=_regime)
 
-    dp = sub.add_parser("data", help="data foundation: import HistData, take snapshots")
-    dp.add_argument("action", choices=["import-histdata", "snapshot"])
-    dp.add_argument("--symbol", help="symbol for import-histdata (e.g. GBPUSD)")
+    dp = sub.add_parser("data", help="data foundation: import HistData, resample, snapshots")
+    dp.add_argument("action", choices=["import-histdata", "resample", "snapshot"])
+    dp.add_argument("--symbol", help="symbol for import-histdata/resample (e.g. GBPUSD)")
     dp.add_argument("--paths", nargs="+", help="HistData .csv/.zip files or a glob")
+    dp.add_argument("--resample", nargs="+",
+                    help="timeframes to resample to, e.g. M5 H1 (import writes M1 first)")
     dp.add_argument("--symbols", nargs="+", help="symbols for snapshot")
-    dp.add_argument("--timeframe", default="M5", help="timeframe for snapshot")
+    dp.add_argument("--timeframe", default="M5",
+                    help="source TF for resample / TF for snapshot")
     dp.set_defaults(func=_data)
 
     args = p.parse_args(argv)
