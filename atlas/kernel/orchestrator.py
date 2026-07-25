@@ -17,6 +17,10 @@ from typing import Callable, Optional
 
 from .. import service
 from ..memory import MemoryStore
+from ..registry import Registry
+from ..registry.registry import make_candidate
+from ..risk import RiskManager, RiskPolicy
+from ..portfolio import PortfolioBuilder
 from ..schemas import DecisionRecord, utcnow_iso
 from ..agents.base import AgentContext
 from ..agents.skeptic import Skeptic
@@ -26,16 +30,13 @@ LAYERS = ["data_integrity", "rule_validity", "backtest_validity",
           "statistical_validity", "risk_validity", "portfolio_validity",
           "deployment_validity"]
 
-_NOT_BUILT = {"risk_validity": "Milestone 4", "portfolio_validity": "Milestone 4",
-              "deployment_validity": "Milestone 8 / human gate"}
-
-
 class Orchestrator:
     def __init__(self, root: str = "."):
         self.root = root
 
     def run(self, hyp_path: str, window: str = "out_sample",
-            narrator: Optional[Callable[[str], str]] = None) -> dict:
+            narrator: Optional[Callable[[str], str]] = None,
+            risk_policy: Optional[RiskPolicy] = None) -> dict:
         store = MemoryStore(self.root)
         decisions = []
 
@@ -75,12 +76,46 @@ class Orchestrator:
             store.write_decision(skeptic)
             decisions.append(skeptic)
 
-            advanced = skeptic.decision == "approve"
-            if advanced:
-                halt = (f"reached statistical_validity; next gate "
-                        f"'risk_validity' not built ({_NOT_BUILT['risk_validity']})")
-            else:
+            reached = "statistical_validity"
+            advanced = False
+            candidate_id = None
+
+            if skeptic.decision != "approve":
                 halt = f"halted at statistical_validity: Skeptic said '{skeptic.decision}'"
+            else:
+                # 5. risk validity — hard gate
+                risk = RiskManager(risk_policy or RiskPolicy(), narrator).run(ctx)
+                store.write_decision(risk); decisions.append(risk)
+                reached = "risk_validity"
+                if risk.decision != "pass":
+                    halt = f"halted at risk_validity: RiskManager said '{risk.decision}'"
+                else:
+                    # 6. portfolio validity (lone strategy -> trivially diversifying)
+                    port = PortfolioBuilder(narrator=narrator).run(ctx)
+                    store.write_decision(port); decisions.append(port)
+                    reached = "portfolio_validity"
+                    if port.decision != "pass":
+                        halt = f"halted at portfolio_validity: '{port.decision}'"
+                    else:
+                        advanced = True
+                        # Auto-register a NON-capital candidate (allowed without a
+                        # human token). Deployment (layer 7) stays human-gated.
+                        reg = Registry(self.root)
+                        try:
+                            cand = make_candidate(
+                                hyp.id, hyp.version, [rec.id],
+                                spec=hyp.spec, allocation=0.0,
+                                risk_limits=hyp.risk_rules)
+                            reg.add_candidate(cand)
+                            candidate_id = cand.strategy_id
+                        finally:
+                            reg.close()
+                        emit("Orchestrator", "deployment_validity", "hold",
+                             f"registered candidate {candidate_id}; promotion to "
+                             f"paper/live requires a human approval token",
+                             conf="high", nxt="human review", title=hyp.title)
+                        halt = ("passed research ladder; candidate registered. "
+                                "Deployment is human-gated — no autonomous promotion.")
 
             # Reporter memo (records the whole chain)
             ctx.extras["decisions"] = decisions
@@ -92,8 +127,8 @@ class Orchestrator:
             return {
                 "hypothesis": hyp, "experiment": rec, "verdict": verdict,
                 "decisions": decisions, "advanced": advanced,
-                "reached_layer": "statistical_validity", "halt_reason": halt,
-                "memo": rep.evidence,
+                "reached_layer": reached, "candidate_id": candidate_id,
+                "halt_reason": halt, "memo": rep.evidence,
             }
         finally:
             store.close()

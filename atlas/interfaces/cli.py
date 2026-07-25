@@ -17,6 +17,8 @@ from ..kernel import Orchestrator
 from ..memory import MemoryStore
 from ..registry import Registry, BotStub
 from ..snapshots import make_snapshot
+from ..portfolio import analyze as portfolio_analyze
+from ..portfolio import portfolio as portfolio_mod
 from ..research.fx import histdata as fx_histdata
 from ..research.fx import regime as fx_regime
 
@@ -81,9 +83,20 @@ def _council(args):
     print("decision ladder:")
     for d in res["decisions"]:
         print(f"  [{d.phase}] {d.agent}: {d.decision}  — {d.evidence[:90]}")
-    print(f"advanced: {res['advanced']}")
+    print(f"reached layer: {res['reached_layer']}  ·  advanced: {res['advanced']}")
+    if res.get("candidate_id"):
+        print(f"registered candidate: {res['candidate_id']} (promotion is human-gated)")
     print(f"halt: {res['halt_reason']}")
     print(f"memo: {res['memo']}")
+
+
+def _portfolio(args):
+    import os as _os
+    book = {}
+    for hp in args.hypotheses:
+        name = _os.path.splitext(_os.path.basename(hp))[0]
+        book[name] = service.hypothesis_trades(hp, root=args.root, window=args.window)
+    print(portfolio_mod.render(portfolio_analyze(book)), end="")
 
 
 def _regime(args):
@@ -141,6 +154,12 @@ def main(argv=None):
     co.add_argument("--window", default="out_sample",
                     choices=["out_sample", "in_sample", "full"])
     co.set_defaults(func=_council)
+
+    pf = sub.add_parser("portfolio", help="portfolio analysis across hypotheses")
+    pf.add_argument("hypotheses", nargs="+")
+    pf.add_argument("--window", default="full",
+                    choices=["out_sample", "in_sample", "full"])
+    pf.set_defaults(func=_portfolio)
 
     rg2 = sub.add_parser("regime", help="per-regime performance breakdown of a hypothesis")
     rg2.add_argument("hypothesis")

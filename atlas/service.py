@@ -58,6 +58,38 @@ def run_experiment(hyp_path: str, root: str = ".", window: str = "out_sample",
         store.close()
 
 
+def hypothesis_trades(hyp_path: str, root: str = ".", window: str = "full") -> list:
+    """All realised trades for a hypothesis across its markets (for portfolio
+    analysis)."""
+    from .research.fx.strategies.base import Strategy
+    from .research.fx.backtester import run as run_bt
+    from .research.fx import data as fx_data, splits as fx_splits, datasources
+
+    cfg = fx_config.load(hyp_path)
+    datasets = os.path.join(root, "datasets")
+    entry_tf = cfg["timeframes"]["entry"]
+    context = datasources.build_context(cfg, datasets)
+    spread = cfg.get("costs", {}).get("spread_pips", 1.0)
+    comm = cfg.get("costs", {}).get("commission_r", 0.0)
+    mtpd = cfg["risk"].get("max_trades_per_day", 3)
+    out = []
+    for sym in cfg["markets"]:
+        try:
+            df = fx_data.load_symbol(datasets, sym, entry_tf)
+        except FileNotFoundError:
+            continue
+        if window == "in_sample":
+            df = fx_splits.in_sample(df, cfg)
+        elif window == "out_sample":
+            df = fx_splits.out_sample(df, cfg)
+        if len(df) < 300:
+            continue
+        strat = Strategy.create(cfg)
+        out.extend(run_bt(sym, df, strat, spread_pips=spread, commission_r=comm,
+                          max_trades_per_day=mtpd, context=context))
+    return out
+
+
 def regime_report(hyp_path: str, root: str = ".", window: str = "full") -> dict:
     """Per-symbol performance bucketed by market regime at entry (Volume 3 §12).
     Returns {symbol: {regime_label: metrics}}."""

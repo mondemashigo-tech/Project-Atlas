@@ -121,9 +121,12 @@ def test_orchestrator_runs_ladder_and_records_decisions():
         for layer in ("data_integrity", "rule_validity", "backtest_validity",
                       "statistical_validity", "reporting"):
             assert layer in phases
-        # ladder must NOT claim to reach deployment (gates 5-7 not built)
-        assert res["reached_layer"] == "statistical_validity"
-        assert "risk_validity" in res["halt_reason"] or "halted" in res["halt_reason"]
+        # Core invariant: never auto-deploy. If it advanced the whole ladder, a
+        # non-capital candidate was registered and deployment stays human-gated.
+        if res["advanced"]:
+            assert res["candidate_id"] and "human-gated" in res["halt_reason"]
+        else:
+            assert "halted" in res["halt_reason"]
         # decisions were persisted to memory
         from atlas.memory import MemoryStore
         store = MemoryStore(root)
