@@ -6,3 +6,4 @@ Importing this package registers every template with the Strategy registry, so
 from . import trend_continuation  # noqa: F401
 from . import mean_reversion      # noqa: F401
 from . import breakout            # noqa: F401
+from . import orb                 # noqa: F401
