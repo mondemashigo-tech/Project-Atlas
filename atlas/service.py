@@ -53,6 +53,9 @@ def run_experiment(hyp_path: str, root: str = ".", window: str = "out_sample",
             monte_carlo=mc_res,
         )
         store.write_experiment(rec, hyp)
+        # Consume the false-discovery budget only for out-of-sample looks.
+        if window == "out_sample" and snap.id:
+            store.record_oos_test(snap.id, window, hyp.id, hyp.preregistration_hash)
         return hyp, rec, v
     finally:
         store.close()

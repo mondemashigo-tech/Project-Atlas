@@ -13,7 +13,7 @@ import sqlite3
 from typing import List, Optional
 
 from ..schemas import (ExperimentRecord, DecisionRecord, Hypothesis,
-                       KnowledgeNote, DataSnapshot)
+                       KnowledgeNote, DataSnapshot, utcnow_iso)
 
 
 class MemoryStore:
@@ -42,6 +42,13 @@ class MemoryStore:
             id TEXT PRIMARY KEY, title TEXT, tags TEXT, json TEXT, created_at TEXT);
         CREATE TABLE IF NOT EXISTS snapshots (
             id TEXT PRIMARY KEY, source TEXT, content_hash TEXT, json TEXT, created_at TEXT);
+        CREATE TABLE IF NOT EXISTS oos_tests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, snapshot_id TEXT, window TEXT,
+            hypothesis_id TEXT, prereg_hash TEXT, at TEXT);
+        CREATE TABLE IF NOT EXISTS graveyard (
+            hypothesis_id TEXT PRIMARY KEY, title TEXT, reason TEXT, at TEXT);
+        CREATE TABLE IF NOT EXISTS policy (
+            key TEXT PRIMARY KEY, json TEXT, updated_at TEXT, updated_by TEXT);
         """)
         c.commit()
 
@@ -131,6 +138,66 @@ class MemoryStore:
         row = self._conn.execute(
             "SELECT json FROM snapshots WHERE id=?", (sid,)).fetchone()
         return DataSnapshot.from_dict(json.loads(row["json"])) if row else None
+
+    def list_snapshots(self) -> List[DataSnapshot]:
+        rows = self._conn.execute(
+            "SELECT json FROM snapshots ORDER BY created_at DESC").fetchall()
+        return [DataSnapshot.from_dict(json.loads(r["json"])) for r in rows]
+
+    # ---- multiple-testing ledger (OOS budget) ------------------------------
+    def record_oos_test(self, snapshot_id: str, window: str, hypothesis_id: str,
+                        prereg_hash: str = "") -> None:
+        """Log that a hypothesis was tested against a snapshot's window. Only
+        out-of-sample looks consume the false-discovery budget."""
+        self._conn.execute(
+            "INSERT INTO oos_tests (snapshot_id, window, hypothesis_id, prereg_hash, at)"
+            " VALUES (?,?,?,?,?)",
+            (snapshot_id, window, hypothesis_id, prereg_hash, utcnow_iso()))
+        self._conn.commit()
+
+    def oos_test_count(self, snapshot_id: str, window: str = "out_sample") -> int:
+        """Distinct hypotheses tested against this snapshot's OOS window — the
+        number of 'looks' at the holdout (multiple-comparisons risk)."""
+        row = self._conn.execute(
+            "SELECT COUNT(DISTINCT hypothesis_id) c FROM oos_tests "
+            "WHERE snapshot_id=? AND window=?", (snapshot_id, window)).fetchone()
+        return int(row["c"]) if row else 0
+
+    # ---- graveyard ---------------------------------------------------------
+    def bury(self, hypothesis_id: str, reason: str) -> None:
+        h = self.get_hypothesis(hypothesis_id)
+        title = h.title if h else hypothesis_id
+        if h:
+            h.status = "GRAVEYARD"
+            self.write_hypothesis(h)
+        self._conn.execute(
+            "INSERT OR REPLACE INTO graveyard VALUES (?,?,?,?)",
+            (hypothesis_id, title, reason,
+             utcnow_iso()))
+        self._conn.commit()
+        d = os.path.join(self.vault, "graveyard")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f"{hypothesis_id}.md"), "w", encoding="utf-8") as f:
+            f.write(f"# GRAVEYARD — {title}\n\n#atlas #graveyard\n\n"
+                    f"**Reason:** {reason}\n")
+
+    def list_graveyard(self) -> List[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM graveyard ORDER BY at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+    # ---- policy memory (human-reviewed) ------------------------------------
+    def set_policy(self, key: str, value: dict, updated_by: str = "human") -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO policy VALUES (?,?,?,?)",
+            (key, json.dumps(value),
+             utcnow_iso(),
+             updated_by))
+        self._conn.commit()
+
+    def get_policy(self, key: str, default: dict = None) -> Optional[dict]:
+        row = self._conn.execute("SELECT json FROM policy WHERE key=?", (key,)).fetchone()
+        return json.loads(row["json"]) if row else default
 
     # ---- knowledge ---------------------------------------------------------
     def write_knowledge(self, note: KnowledgeNote) -> KnowledgeNote:

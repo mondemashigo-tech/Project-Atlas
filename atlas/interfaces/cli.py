@@ -99,6 +99,37 @@ def _portfolio(args):
     print(portfolio_mod.render(portfolio_analyze(book)), end="")
 
 
+def _governance(args):
+    from ..governance import budget_status, OOSBudget
+    store = MemoryStore(args.root)
+    try:
+        snaps = store.list_snapshots()
+        if not snaps:
+            print("no snapshots recorded yet")
+            return
+        print("OUT-OF-SAMPLE BUDGET (looks per holdout)")
+        for s in snaps:
+            b = budget_status(store, s.id, "out_sample", OOSBudget())
+            flag = "  <-- BURNED (refresh data)" if b["burned"] else ""
+            print(f"  {s.id}  {b['count']}/{b['budget']} looks  "
+                  f"[{s.symbols} {s.timeframe}]{flag}")
+    finally:
+        store.close()
+
+
+def _graveyard(args):
+    store = MemoryStore(args.root)
+    try:
+        rows = store.list_graveyard()
+        if not rows:
+            print("graveyard is empty")
+            return
+        for r in rows:
+            print(f"{r['at']}  {r['hypothesis_id']}  {r['title']}\n    {r['reason'][:100]}")
+    finally:
+        store.close()
+
+
 def _regime(args):
     report = service.regime_report(args.hypothesis, root=args.root, window=args.window)
     if not report:
@@ -148,6 +179,12 @@ def main(argv=None):
 
     b = sub.add_parser("bot", help="what the stub executor WOULD run (no orders)")
     b.set_defaults(func=_bot)
+
+    gv = sub.add_parser("governance", help="out-of-sample budget / multiple-testing ledger")
+    gv.set_defaults(func=_governance)
+
+    gy = sub.add_parser("graveyard", help="list buried (rejected) hypotheses")
+    gy.set_defaults(func=_graveyard)
 
     co = sub.add_parser("council", help="run the decision ladder (orchestrator + agents)")
     co.add_argument("hypothesis")

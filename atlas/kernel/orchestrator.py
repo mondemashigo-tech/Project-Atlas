@@ -21,6 +21,7 @@ from ..registry import Registry
 from ..registry.registry import make_candidate
 from ..risk import RiskManager, RiskPolicy
 from ..portfolio import PortfolioBuilder
+from ..governance import budget_status, OOSBudget
 from ..schemas import DecisionRecord, utcnow_iso
 from ..agents.base import AgentContext
 from ..agents.skeptic import Skeptic
@@ -80,8 +81,25 @@ class Orchestrator:
             advanced = False
             candidate_id = None
 
-            if skeptic.decision != "approve":
+            # Governance: how many looks has this holdout taken? (false-discovery)
+            budget = budget_status(store, rec.data_snapshot_id, "out_sample",
+                                   OOSBudget()) if window == "out_sample" else \
+                {"burned": False, "count": 0, "budget": 0}
+            emit("Orchestrator", "governance",
+                 "burned" if budget["burned"] else "ok",
+                 f"OOS looks {budget['count']}/{budget['budget']} on "
+                 f"{rec.data_snapshot_id}", title=hyp.title)
+
+            if skeptic.decision == "reject":
+                store.bury(hyp.id, reason="Skeptic reject: " + skeptic.evidence[:200])
+                halt = ("halted at statistical_validity: Skeptic said 'reject' "
+                        "(buried in graveyard)")
+            elif skeptic.decision != "approve":
                 halt = f"halted at statistical_validity: Skeptic said '{skeptic.decision}'"
+            elif budget["burned"]:
+                halt = (f"halted at statistical_validity: OOS budget exhausted "
+                        f"({budget['count']}/{budget['budget']} looks) — refresh "
+                        f"the holdout with unseen data before trusting a pass")
             else:
                 # 5. risk validity — hard gate
                 risk = RiskManager(risk_policy or RiskPolicy(), narrator).run(ctx)
