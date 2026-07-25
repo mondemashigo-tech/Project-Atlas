@@ -93,18 +93,32 @@ python -m atlas.research.fx.cli export GBPUSD M5 3   # pull MT5 history (bot mac
 pytest -q
 ```
 
-## Status
+## Status — Milestones 1–8 complete ✅ (66 tests green)
 
-**Atlas parent spine (Milestone 1)** ✅ — core schemas, SQLite memory + Obsidian
-mirror, Strategy Registry airlock (human-gated, kill-switch, stub consumer),
-library-first service + CLI. The FX engine is preserved as a research module.
+| # | Milestone | What it adds |
+|---|---|---|
+| 1 | Parent spine | schemas, SQLite memory + vault mirror, Registry airlock, service/CLI |
+| 2 | Data foundation | HistData importer, `DataSnapshot` provenance, regime breakdown |
+| 3 | Kernel + agents | Orchestrator 7-layer ladder, Skeptic, Reporter |
+| 4 | Risk & portfolio | RiskManager hard gate, portfolio correlation/DD, candidate registration |
+| 5 | Memory governance | OOS budget / multiple-testing ledger, graveyard, policy memory |
+| 6 | Full council | Statistician, Historian (novelty), Architect (lab health) |
+| 7 | Knowledge + ideas | Librarian (ingest→tagged knowledge), Scientist (propose + rank) |
+| 8 | Autonomy loop | governed research loop (L≤4), decay monitoring, cycle reports |
 
-**FX research module** ✅ — backtest, R-unit metrics, verdicts, in/out-of-sample
-splits, walk-forward, Monte Carlo (bootstrap + shuffle), optimiser, journal, SVG
-charts, tabbed HTML dashboard, carry + economic-calendar filters.
+**Enforced invariants:** out-of-sample is the verdict; no generative agent emits a
+number; pre-registration is hash-locked (rule drift caught); the 7 layers can't be
+skipped; a burned holdout blocks a pass; **nothing reaches capital without a human
+approval token — at any autonomy level**; nothing is deleted (failures → graveyard).
 
-**Next:** Milestone 2 — HistData importer + `DataSnapshot` wiring (deep
-multi-regime data). Milestone 3 — Kernel FSM + Skeptic & Reporter agents.
+**Atlas CLI:** `run · experiments · council · registry · bot · governance ·
+graveyard · architect · regime · portfolio · data · ingest · propose · loop ·
+monitor`. FX research module CLI: `python -m atlas.research.fx.cli`.
+
+**Next (out of the research-lab scope):** wire the real execution engine to
+`registry.export_json()`; add web/voice/Obsidian front-ends; feed live fills into
+decay monitoring. And the real bottleneck for *trusted* verdicts: deep multi-year
+data via the HistData importer.
 
 ### Data sources (Phase 4)
 

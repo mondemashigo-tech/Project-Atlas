@@ -142,6 +142,36 @@ def _propose(args):
         store.close()
 
 
+def _loop(args):
+    from ..lab import ResearchLoop
+    loop = ResearchLoop(root=args.root, autonomy_level=args.autonomy,
+                        max_per_cycle=args.max_per_cycle)
+    for r in loop.run(args.base, cycles=args.cycles, window=args.window):
+        print(f"cycle [L{r['autonomy_level']}] proposed {r['proposed']} "
+              f"selected {r['selected']} tested {len(r['tested'])} "
+              f"candidates {len(r['candidates'])}")
+        for t in r["tested"]:
+            print(f"  {t['name']}: {t['verdict']} "
+                  f"(reached {t['reached']}, advanced={t['advanced']})")
+        if r.get("note"):
+            print(f"  note: {r['note']}")
+        print(f"  report: {r.get('report_path')}")
+    print("NOTE: the loop never promotes to capital — that stays human-gated.")
+
+
+def _monitor(args):
+    from ..lab import monitor
+    reg = Registry(args.root)
+    try:
+        rows = monitor(reg)
+        if not rows:
+            print("no executable strategies to monitor (nothing promoted to capital)")
+        for r in rows:
+            print(r)
+    finally:
+        reg.close()
+
+
 def _architect(args):
     from ..agents import Architect
     store = MemoryStore(args.root)
@@ -222,6 +252,18 @@ def main(argv=None):
 
     ar = sub.add_parser("architect", help="lab health + structural suggestions")
     ar.set_defaults(func=_architect)
+
+    lp = sub.add_parser("loop", help="governed research loop (propose->test->record)")
+    lp.add_argument("base", help="base hypothesis YAML")
+    lp.add_argument("--cycles", type=int, default=1)
+    lp.add_argument("--autonomy", type=int, default=3, help="autonomy level (<=4)")
+    lp.add_argument("--max-per-cycle", type=int, default=5, dest="max_per_cycle")
+    lp.add_argument("--window", default="out_sample",
+                    choices=["out_sample", "in_sample", "full"])
+    lp.set_defaults(func=_loop)
+
+    mn = sub.add_parser("monitor", help="decay/drift monitoring of executable strategies")
+    mn.set_defaults(func=_monitor)
 
     ig = sub.add_parser("ingest", help="Librarian: ingest a file/dir into knowledge")
     ig.add_argument("path")
