@@ -4,5 +4,9 @@ emits a DecisionRecord (Volume 2)."""
 from .base import Agent, AgentContext
 from .skeptic import Skeptic
 from .reporter import Reporter
+from .statistician import Statistician
+from .historian import Historian
+from .architect import Architect
 
-__all__ = ["Agent", "AgentContext", "Skeptic", "Reporter"]
+__all__ = ["Agent", "AgentContext", "Skeptic", "Reporter", "Statistician",
+           "Historian", "Architect"]

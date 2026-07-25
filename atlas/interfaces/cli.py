@@ -117,6 +117,15 @@ def _governance(args):
         store.close()
 
 
+def _architect(args):
+    from ..agents import Architect
+    store = MemoryStore(args.root)
+    try:
+        print(Architect().report(store), end="")
+    finally:
+        store.close()
+
+
 def _graveyard(args):
     store = MemoryStore(args.root)
     try:
@@ -185,6 +194,9 @@ def main(argv=None):
 
     gy = sub.add_parser("graveyard", help="list buried (rejected) hypotheses")
     gy.set_defaults(func=_graveyard)
+
+    ar = sub.add_parser("architect", help="lab health + structural suggestions")
+    ar.set_defaults(func=_architect)
 
     co = sub.add_parser("council", help="run the decision ladder (orchestrator + agents)")
     co.add_argument("hypothesis")

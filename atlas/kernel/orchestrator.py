@@ -26,6 +26,8 @@ from ..schemas import DecisionRecord, utcnow_iso
 from ..agents.base import AgentContext
 from ..agents.skeptic import Skeptic
 from ..agents.reporter import Reporter
+from ..agents.statistician import Statistician
+from ..agents.historian import Historian
 
 LAYERS = ["data_integrity", "rule_validity", "backtest_validity",
           "statistical_validity", "risk_validity", "portfolio_validity",
@@ -70,9 +72,17 @@ class Orchestrator:
                  f"experiment {rec.id} engine {rec.engine_version} "
                  f"verdict {rec.verdict}", title=hyp.title)
 
-            # 4. statistical validity — the Skeptic (deterministic rigor checks)
             ctx = AgentContext(task_id=tid, hypothesis=hyp, experiment=rec,
                                verdict=verdict, extras={"decisions": decisions})
+
+            # Novelty check — the Historian (has this exact idea been tested?)
+            hist = Historian(store, narrator).run(ctx)
+            store.write_decision(hist); decisions.append(hist)
+
+            # 4. statistical validity — Statistician quantifies, Skeptic judges.
+            stat = Statistician(narrator).run(ctx)
+            store.write_decision(stat); decisions.append(stat)
+            ctx.extras["statistician"] = stat
             skeptic = Skeptic(narrator).run(ctx)
             store.write_decision(skeptic)
             decisions.append(skeptic)

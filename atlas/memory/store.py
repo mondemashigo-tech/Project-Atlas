@@ -67,6 +67,29 @@ class MemoryStore:
             "SELECT json FROM hypotheses WHERE id=?", (hid,)).fetchone()
         return Hypothesis.from_dict(json.loads(row["json"])) if row else None
 
+    def find_hypotheses_by_prereg(self, prereg_hash: str) -> List[dict]:
+        rows = self._conn.execute(
+            "SELECT id, title, status FROM hypotheses WHERE preregistration_hash=?",
+            (prereg_hash,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def counts(self) -> dict:
+        def n(sql):
+            return int(self._conn.execute(sql).fetchone()[0])
+        return {
+            "hypotheses": n("SELECT COUNT(*) FROM hypotheses"),
+            "experiments": n("SELECT COUNT(*) FROM experiments"),
+            "graveyard": n("SELECT COUNT(*) FROM graveyard"),
+            "decisions": n("SELECT COUNT(*) FROM decisions"),
+            "candidates": n("SELECT COUNT(*) FROM snapshots"),
+        }
+
+    def decision_tally(self) -> dict:
+        rows = self._conn.execute(
+            "SELECT agent, decision, COUNT(*) c FROM decisions GROUP BY agent, decision"
+        ).fetchall()
+        return {f"{r['agent']}:{r['decision']}": int(r["c"]) for r in rows}
+
     # ---- experiments (immutable) ------------------------------------------
     def write_experiment(self, rec: ExperimentRecord,
                          hypothesis: Hypothesis = None) -> ExperimentRecord:
