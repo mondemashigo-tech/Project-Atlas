@@ -32,7 +32,8 @@ MAX_AUTONOMY = 4       # L4 (sandbox self-queuing) is the ceiling — never exce
 
 class ResearchLoop:
     def __init__(self, root: str = ".", autonomy_level: int = 3,
-                 max_per_cycle: int = 5, risk_policy: Optional[RiskPolicy] = None):
+                 max_per_cycle: int = 5, risk_policy: Optional[RiskPolicy] = None,
+                 data_utc_offset: float = 0):
         if autonomy_level > MAX_AUTONOMY:
             raise ValueError(f"autonomy level {autonomy_level} exceeds ceiling "
                              f"L{MAX_AUTONOMY} (sandbox self-queuing). Refused.")
@@ -40,6 +41,7 @@ class ResearchLoop:
         self.autonomy_level = autonomy_level
         self.max_per_cycle = max_per_cycle
         self.risk_policy = risk_policy
+        self.data_utc_offset = data_utc_offset
 
     def run_cycle(self, base_hyp_path: str, grid: Dict[str, list] = None,
                   window: str = "out_sample") -> dict:
@@ -70,7 +72,8 @@ class ResearchLoop:
             with open(path, "w") as f:
                 yaml.safe_dump(clean, f)
             try:
-                res = orch.run(path, window=window, risk_policy=self.risk_policy)
+                res = orch.run(path, window=window, risk_policy=self.risk_policy,
+                               data_utc_offset=self.data_utc_offset)
             finally:
                 os.remove(path)
             report["tested"].append({

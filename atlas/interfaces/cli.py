@@ -146,7 +146,8 @@ def _propose(args):
 def _loop(args):
     from ..lab import ResearchLoop
     loop = ResearchLoop(root=args.root, autonomy_level=args.autonomy,
-                        max_per_cycle=args.max_per_cycle)
+                        max_per_cycle=args.max_per_cycle,
+                        data_utc_offset=args.data_utc_offset)
     for r in loop.run(args.base, cycles=args.cycles, window=args.window):
         print(f"cycle [L{r['autonomy_level']}] proposed {r['proposed']} "
               f"selected {r['selected']} tested {len(r['tested'])} "
@@ -313,6 +314,8 @@ def main(argv=None):
     lp.add_argument("--max-per-cycle", type=int, default=5, dest="max_per_cycle")
     lp.add_argument("--window", default="out_sample",
                     choices=["out_sample", "in_sample", "full"])
+    lp.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset",
+                    help="hours to subtract from data timestamps (broker time -> UTC)")
     lp.set_defaults(func=_loop)
 
     mn = sub.add_parser("monitor", help="decay/drift monitoring of executable strategies")
