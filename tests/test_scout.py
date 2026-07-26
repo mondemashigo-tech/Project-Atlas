@@ -88,6 +88,68 @@ def test_llm_extractor_result_flows_through_build():
     assert Strategy.create(cfg) is not None
 
 
+class _Block:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def test_discover_urls_from_message_merges_json_and_results():
+    from atlas.scout.discover import urls_from_message
+    msg = _Block(content=[
+        _Block(type="text",
+               text='Here you go: [{"url":"https://a.com/orb","title":"ORB"}]'),
+        _Block(type="web_search_tool_result",
+               content=[_Block(url="https://b.com/breakout", title="B"),
+                        _Block(url="https://a.com/orb", title="dup")]),
+    ])
+    urls = urls_from_message(msg)
+    assert urls[0] == "https://a.com/orb"          # model's JSON pick first
+    assert "https://b.com/breakout" in urls
+    assert urls.count("https://a.com/orb") == 1     # deduped
+
+
+def test_discover_falls_back_to_bare_urls_in_prose():
+    from atlas.scout.discover import urls_from_message
+    msg = _Block(content=[_Block(type="text",
+                 text="See https://x.com/strategy and http://y.com/rules.")])
+    urls = urls_from_message(msg)
+    assert "https://x.com/strategy" in urls and "http://y.com/rules" in urls
+
+
+def test_scout_discover_pipeline_with_stub_searcher(tmp_path):
+    # write two local "articles"; the stub searcher returns their paths as if URLs
+    a = tmp_path / "orb.html"
+    a.write_text("<html><body><p>Opening range breakout: first 15-min range, "
+                 "20 EMA filter, 1:2 target.</p></body></html>")
+    b = tmp_path / "chan.html"
+    b.write_text("<html><body><p>Buy the 40-day channel breakout, 2 ATR stop.</p>"
+                 "</body></html>")
+    stub = lambda q, n: [str(a), str(b)][:n]
+    out = Scout().discover("breakouts", root=str(tmp_path), markets=["GBPUSD"],
+                           max_results=2, test=False, searcher=stub)
+    assert out["query"] == "breakouts"
+    templates = sorted(r["template"] for r in out["results"])
+    assert templates == ["breakout", "orb"]
+    assert out["errors"] == []
+    for r in out["results"]:
+        cfg = __import__("atlas.research.fx.config", fromlist=["load"]).load(r["path"])
+        assert Strategy.create(cfg) is not None
+
+
+def test_scout_discover_captures_bad_sources(tmp_path):
+    good = tmp_path / "ok.html"
+    good.write_text("<html><body><p>Donchian 20-day breakout, 1:2 target.</p></body></html>")
+    baddir = tmp_path / "a_directory"           # exists but can't be read as a file
+    baddir.mkdir()
+    stub = lambda q, n: [str(baddir), str(good)]
+    out = Scout().discover("x", root=str(tmp_path), markets=["GBPUSD"],
+                           max_results=5, test=False, searcher=stub)
+    # the bad source is captured as an error; the good one still scouts — the
+    # sweep never crashes on one dead source
+    assert len(out["results"]) == 1 and out["results"][0]["template"] == "breakout"
+    assert len(out["errors"]) == 1 and out["errors"][0]["url"] == str(baddir)
+
+
 def test_scout_end_to_end_from_file_no_network():
     with tempfile.TemporaryDirectory() as d:
         src = os.path.join(d, "article.html")

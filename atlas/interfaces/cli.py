@@ -148,6 +148,46 @@ def _scout(args):
         print(f"  run it:  py -m atlas council {info['path']} --window out_sample")
 
 
+def _discover(args):
+    from ..scout import Scout
+    from ..scout.discover import anthropic_searcher
+    # the LLM reader is the right partner for discovered prose; auto-use if keyed
+    extractor = None
+    if not args.no_llm and (args.llm or os.environ.get("ANTHROPIC_API_KEY")):
+        from ..scout.llm import anthropic_extractor
+        try:
+            extractor = anthropic_extractor(model=args.llm_model)
+        except Exception as e:
+            print(f"  reader   : heuristic (LLM unavailable: {e})")
+    try:
+        searcher = anthropic_searcher(model=args.llm_model, max_searches=args.max_searches)
+    except Exception as e:
+        print(f"discovery unavailable: {e}")
+        print("Set ANTHROPIC_API_KEY and `pip install anthropic` to let the "
+              "Scout find its own URLs.")
+        return
+    sc = Scout(extractor=extractor)
+    print(f"searching the web for: {args.query!r}  (up to {args.max} sources)")
+    out = sc.discover(args.query, root=args.root, markets=args.markets,
+                      max_results=args.max, test=args.test,
+                      data_utc_offset=args.data_utc_offset, searcher=searcher)
+    if not out["urls"]:
+        print("no candidate URLs found.")
+    for url in out["urls"]:
+        print(f"  found: {url}")
+    print(f"\nscouted {len(out['results'])} source(s):")
+    for info in out["results"]:
+        line = f"  {info['template']:18s} <- {info.get('source', info['name'])}"
+        if args.test:
+            line += f"  VERDICT {info['verdict']} (reached {info['reached_layer']})"
+        print(line)
+        print(f"      hypothesis -> {info['path']}")
+    for err in out["errors"]:
+        print(f"  skipped {err['url']}  ({err['error']})")
+    if not args.test and out["results"]:
+        print("\nrun the whole batch through the council with --test next time.")
+
+
 def _ingest(args):
     from ..agents import Librarian
     store = MemoryStore(args.root)
@@ -363,6 +403,21 @@ def main(argv=None):
     sc.add_argument("--llm-model", default="claude-opus-5", dest="llm_model",
                     help="model for the LLM reader (default: claude-opus-5)")
     sc.set_defaults(func=_scout)
+
+    dc = sub.add_parser("discover",
+                        help="Scout: find its own URLs on a topic (web search) -> hypotheses")
+    dc.add_argument("query", help="a topic, e.g. 'opening range breakout intraday forex'")
+    dc.add_argument("--markets", nargs="+", default=["GBPUSD", "USDJPY"])
+    dc.add_argument("--max", type=int, default=3, help="max sources to scout (default 3)")
+    dc.add_argument("--max-searches", type=int, default=5, dest="max_searches",
+                    help="max web searches the model may run (default 5)")
+    dc.add_argument("--test", action="store_true", help="run each through the council")
+    dc.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset")
+    dc.add_argument("--llm", action="store_true", help="force the LLM reader")
+    dc.add_argument("--no-llm", action="store_true", help="use the heuristic reader")
+    dc.add_argument("--llm-model", default="claude-opus-5", dest="llm_model",
+                    help="model for search + reader (default: claude-opus-5)")
+    dc.set_defaults(func=_discover)
 
     ig = sub.add_parser("ingest", help="Librarian: ingest a file/dir into knowledge")
     ig.add_argument("path")

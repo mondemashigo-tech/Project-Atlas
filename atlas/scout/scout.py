@@ -70,3 +70,32 @@ class Scout:
                      "advanced": res["advanced"],
                      "candidate_id": res.get("candidate_id")})
         return info
+
+    def discover(self, query: str, root: str = ".", markets: List[str] = None,
+                 max_results: int = 5, test: bool = False,
+                 data_utc_offset: float = 0,
+                 searcher: Optional[Callable[[str, int], List[str]]] = None) -> Dict:
+        """Find candidate articles for a topic, then scout (and optionally test)
+        each one. `searcher(query, max_results)->[url,...]` is injectable; by
+        default it uses the Anthropic web-search server tool.
+
+        Returns {"query", "urls", "results":[per-source dict], "errors":[...]}.
+        Individual source failures are captured, never fatal — the sweep goes on.
+        """
+        if searcher is None:
+            from .discover import anthropic_searcher
+            searcher = anthropic_searcher()
+        urls = searcher(query, max_results)
+
+        results, errors = [], []
+        for url in urls:
+            try:
+                if test:
+                    info = self.scout_and_test(url, root, markets,
+                                               data_utc_offset=data_utc_offset)
+                else:
+                    info = self.scout(url, root, markets)
+                results.append(info)
+            except Exception as e:               # a dead link mustn't stop the sweep
+                errors.append({"url": url, "error": f"{type(e).__name__}: {e}"})
+        return {"query": query, "urls": urls, "results": results, "errors": errors}
