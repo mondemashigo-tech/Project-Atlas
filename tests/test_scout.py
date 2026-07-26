@@ -51,6 +51,43 @@ def test_build_hypothesis_is_valid_and_buildable():
     assert Strategy.create(cfg) is not None       # the engine can build it
 
 
+def test_llm_sanitise_allowlists_and_coerces():
+    from atlas.scout.llm import sanitise
+    raw = {"template": "orb",
+           "params": {"orb.range_minutes": "15 minutes",   # coerced -> 15
+                      "orb.ema": 20,
+                      "risk.target_r": 2.0,
+                      "evil.injected": 999,                  # off-allowlist -> dropped
+                      "orb.bogus": 5},                       # off-allowlist -> dropped
+           "evidence": "first 15-min range, 20 ema, 1:2"}
+    out = sanitise(raw)
+    assert out["template"] == "orb"
+    assert out["params"] == {"orb.range_minutes": 15, "orb.ema": 20,
+                             "risk.target_r": 2.0}
+    assert "evil.injected" not in out["params"]
+
+
+def test_llm_sanitise_rejects_unknown_template():
+    import pytest
+    from atlas.scout.llm import sanitise
+    with pytest.raises(ValueError):
+        sanitise({"template": "martingale", "params": {}})
+
+
+def test_llm_extractor_result_flows_through_build():
+    # simulate what an LLM returns; verify the whole pipe builds a valid config
+    from atlas.scout.llm import sanitise
+    stub = lambda t: sanitise({"template": "mean_reversion",
+                               "params": {"meanrev.ma_period": 30,
+                                          "meanrev.entry_z": "2.5 sigma"},
+                               "evidence": "fade 2.5 std from 30 MA"})
+    out = extract_rules("some article prose", extractor=stub)
+    assert out["template"] == "mean_reversion"
+    cfg = build_hypothesis(out, "scout_llm_test", ["GBPUSD"])
+    assert cfg["meanrev"]["ma_period"] == 30 and cfg["meanrev"]["entry_z"] == 2.5
+    assert Strategy.create(cfg) is not None
+
+
 def test_scout_end_to_end_from_file_no_network():
     with tempfile.TemporaryDirectory() as d:
         src = os.path.join(d, "article.html")

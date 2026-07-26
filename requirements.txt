@@ -2,3 +2,7 @@ pandas>=2.0
 numpy>=1.24
 pyyaml>=6.0
 pytest>=7.0
+
+# Optional: only needed for the Scout's LLM reader (`atlas scout --llm`).
+# The core lab runs without it; extraction falls back to the heuristic reader.
+# anthropic>=0.40

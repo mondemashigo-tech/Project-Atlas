@@ -10,6 +10,7 @@ The FX research module keeps its own CLI at `python -m atlas.research.fx.cli`.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from .. import service
@@ -120,7 +121,17 @@ def _governance(args):
 
 def _scout(args):
     from ..scout import Scout
-    sc = Scout()
+    extractor = None
+    # Use the LLM extractor when asked, or auto-detect a key unless --no-llm.
+    want_llm = args.llm or (not args.no_llm and os.environ.get("ANTHROPIC_API_KEY"))
+    if want_llm:
+        from ..scout.llm import anthropic_extractor
+        try:
+            extractor = anthropic_extractor(model=args.llm_model)
+            print(f"  reader   : LLM ({args.llm_model})")
+        except Exception as e:
+            print(f"  reader   : heuristic (LLM unavailable: {e})")
+    sc = Scout(extractor=extractor)
     if args.test:
         info = sc.scout_and_test(args.source, root=args.root, markets=args.markets,
                                  data_utc_offset=args.data_utc_offset)
@@ -345,6 +356,12 @@ def main(argv=None):
     sc.add_argument("--markets", nargs="+", default=["GBPUSD", "USDJPY"])
     sc.add_argument("--test", action="store_true", help="also run it through the council")
     sc.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset")
+    sc.add_argument("--llm", action="store_true",
+                    help="force the LLM reader (needs ANTHROPIC_API_KEY)")
+    sc.add_argument("--no-llm", action="store_true",
+                    help="force the heuristic reader even if a key is set")
+    sc.add_argument("--llm-model", default="claude-opus-5", dest="llm_model",
+                    help="model for the LLM reader (default: claude-opus-5)")
     sc.set_defaults(func=_scout)
 
     ig = sub.add_parser("ingest", help="Librarian: ingest a file/dir into knowledge")
