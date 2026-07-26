@@ -118,6 +118,25 @@ def _governance(args):
         store.close()
 
 
+def _scout(args):
+    from ..scout import Scout
+    sc = Scout()
+    if args.test:
+        info = sc.scout_and_test(args.source, root=args.root, markets=args.markets,
+                                 data_utc_offset=args.data_utc_offset)
+    else:
+        info = sc.scout(args.source, root=args.root, markets=args.markets)
+    print(f"scouted: {info['name']}")
+    print(f"  template : {info['template']}")
+    print(f"  extracted: {info['evidence']}")
+    print(f"  hypothesis written -> {info['path']}")
+    if args.test:
+        print(f"  VERDICT  : {info['verdict']}  (reached {info['reached_layer']}, "
+              f"advanced={info['advanced']})")
+    else:
+        print(f"  run it:  py -m atlas council {info['path']} --window out_sample")
+
+
 def _ingest(args):
     from ..agents import Librarian
     store = MemoryStore(args.root)
@@ -320,6 +339,13 @@ def main(argv=None):
 
     mn = sub.add_parser("monitor", help="decay/drift monitoring of executable strategies")
     mn.set_defaults(func=_monitor)
+
+    sc = sub.add_parser("scout", help="Scout: source an idea (URL/file/text) -> hypothesis")
+    sc.add_argument("source", help="a URL, a local file, or raw text")
+    sc.add_argument("--markets", nargs="+", default=["GBPUSD", "USDJPY"])
+    sc.add_argument("--test", action="store_true", help="also run it through the council")
+    sc.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset")
+    sc.set_defaults(func=_scout)
 
     ig = sub.add_parser("ingest", help="Librarian: ingest a file/dir into knowledge")
     ig.add_argument("path")
