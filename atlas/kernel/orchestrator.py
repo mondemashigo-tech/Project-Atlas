@@ -39,7 +39,8 @@ class Orchestrator:
 
     def run(self, hyp_path: str, window: str = "out_sample",
             narrator: Optional[Callable[[str], str]] = None,
-            risk_policy: Optional[RiskPolicy] = None) -> dict:
+            risk_policy: Optional[RiskPolicy] = None,
+            data_utc_offset: float = 0) -> dict:
         store = MemoryStore(self.root)
         decisions = []
 
@@ -54,7 +55,8 @@ class Orchestrator:
         try:
             # Layers 1–3 are realised by running the deterministic engine + provenance.
             hyp, rec, verdict = service.run_experiment(
-                hyp_path, root=self.root, window=window)
+                hyp_path, root=self.root, window=window,
+                data_utc_offset=data_utc_offset)
             tid = hyp.id
             snap = store.get_snapshot(rec.data_snapshot_id)
 

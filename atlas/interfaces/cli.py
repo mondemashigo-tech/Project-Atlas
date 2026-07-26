@@ -76,7 +76,8 @@ def _bot(args):
 
 
 def _council(args):
-    res = Orchestrator(args.root).run(args.hypothesis, window=args.window)
+    res = Orchestrator(args.root).run(args.hypothesis, window=args.window,
+                                      data_utc_offset=args.data_utc_offset)
     h, e = res["hypothesis"], res["experiment"]
     print(f"hypothesis {h.id} v{h.version} [{h.status}]  experiment {e.id}  "
           f"verdict {e.verdict}")
@@ -329,6 +330,8 @@ def main(argv=None):
     co.add_argument("hypothesis")
     co.add_argument("--window", default="out_sample",
                     choices=["out_sample", "in_sample", "full"])
+    co.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset",
+                    help="hours to subtract from data timestamps (broker time -> UTC)")
     co.set_defaults(func=_council)
 
     pf = sub.add_parser("portfolio", help="portfolio analysis across hypotheses")

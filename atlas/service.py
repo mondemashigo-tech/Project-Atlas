@@ -20,11 +20,18 @@ from .snapshots import make_snapshot
 
 
 def run_experiment(hyp_path: str, root: str = ".", window: str = "out_sample",
-                   mc: bool = True) -> Tuple[Hypothesis, ExperimentRecord, dict]:
+                   mc: bool = True, data_utc_offset: float = 0
+                   ) -> Tuple[Hypothesis, ExperimentRecord, dict]:
     """Load an FX hypothesis, freeze it (pre-registration), run the deterministic
     engine, and record an immutable ExperimentRecord in memory (+ Obsidian mirror).
-    Returns (hypothesis, experiment_record, verdict). Produces no signals."""
+    Returns (hypothesis, experiment_record, verdict). Produces no signals.
+
+    data_utc_offset shifts broker-server-time bars back to true UTC so a
+    session-based hypothesis (e.g. London) aligns to real market hours. It is
+    part of the frozen spec, so it changes the pre-registration hash."""
     cfg = fx_config.load(hyp_path)
+    if data_utc_offset:
+        cfg.setdefault("session", {})["data_utc_offset"] = data_utc_offset
     hyp = Hypothesis.from_fx_config(cfg).freeze().ensure_valid()
 
     store = MemoryStore(root)
