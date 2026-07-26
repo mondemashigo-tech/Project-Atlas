@@ -159,17 +159,21 @@ def _discover(args):
             extractor = anthropic_extractor(model=args.llm_model)
         except Exception as e:
             print(f"  reader   : heuristic (LLM unavailable: {e})")
+    fx_only = not args.all_markets
     try:
-        searcher = anthropic_searcher(model=args.llm_model, max_searches=args.max_searches)
+        searcher = anthropic_searcher(model=args.llm_model,
+                                      max_searches=args.max_searches,
+                                      fx_only=fx_only)
     except Exception as e:
         print(f"discovery unavailable: {e}")
         print("Set ANTHROPIC_API_KEY and `pip install anthropic` to let the "
               "Scout find its own URLs.")
         return
     sc = Scout(extractor=extractor)
-    print(f"searching the web for: {args.query!r}  (up to {args.max} sources)")
+    scope = "forex-only" if fx_only else "all markets"
+    print(f"searching the web for: {args.query!r}  ({scope}, up to {args.max} sources)")
     out = sc.discover(args.query, root=args.root, markets=args.markets,
-                      max_results=args.max, test=args.test,
+                      max_results=args.max, test=args.test, fx_only=fx_only,
                       data_utc_offset=args.data_utc_offset, searcher=searcher)
     if not out["urls"]:
         print("no candidate URLs found.")
@@ -182,8 +186,10 @@ def _discover(args):
             line += f"  VERDICT {info['verdict']} (reached {info['reached_layer']})"
         print(line)
         print(f"      hypothesis -> {info['path']}")
+    for sk in out.get("skipped", []):
+        print(f"  off-market, skipped: {sk['url']}  ({sk['reason']})")
     for err in out["errors"]:
-        print(f"  skipped {err['url']}  ({err['error']})")
+        print(f"  error, skipped: {err['url']}  ({err['error']})")
     if not args.test and out["results"]:
         print("\nrun the whole batch through the council with --test next time.")
 
@@ -412,6 +418,8 @@ def main(argv=None):
     dc.add_argument("--max-searches", type=int, default=5, dest="max_searches",
                     help="max web searches the model may run (default 5)")
     dc.add_argument("--test", action="store_true", help="run each through the council")
+    dc.add_argument("--all-markets", action="store_true", dest="all_markets",
+                    help="don't restrict to forex (default: forex-only, fair on your FX data)")
     dc.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset")
     dc.add_argument("--llm", action="store_true", help="force the LLM reader")
     dc.add_argument("--no-llm", action="store_true", help="use the heuristic reader")

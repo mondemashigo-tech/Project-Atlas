@@ -116,6 +116,41 @@ def test_discover_falls_back_to_bare_urls_in_prose():
     assert "https://x.com/strategy" in urls and "http://y.com/rules" in urls
 
 
+def test_is_fx_source_gate():
+    from atlas.scout.discover import is_fx_source
+    fx = ("This forex strategy trades GBP/USD and USD/JPY on the London session. "
+          "Target 20 pips, stop 15 pips on the currency pair.")
+    equity = ("A 0DTE SPY options strategy. Buy calls on the S&P 500 at the open; "
+              "QQQ works too. Pure equity/ETF play, no forex here.")
+    assert is_fx_source(fx) is True
+    assert is_fx_source(equity) is False
+
+
+def test_discover_fx_only_skips_offmarket(tmp_path):
+    fxfile = tmp_path / "fx.html"
+    fxfile.write_text("<html><body><p>Forex breakout on GBP/USD: buy the 40-day "
+                      "channel high, 20 pip stop, currency pair intraday.</p></body></html>")
+    spyfile = tmp_path / "spy.html"
+    spyfile.write_text("<html><body><p>0DTE SPY options: buy S&P 500 calls on the "
+                       "opening range breakout. QQQ equity play.</p></body></html>")
+    stub = lambda q, n: [str(spyfile), str(fxfile)]
+    out = Scout().discover("breakout", root=str(tmp_path), markets=["GBPUSD"],
+                           max_results=5, test=False, fx_only=True, searcher=stub)
+    assert len(out["results"]) == 1                       # only the forex one scouted
+    assert out["results"][0]["template"] == "breakout"
+    assert len(out["skipped"]) == 1 and out["skipped"][0]["url"] == str(spyfile)
+
+
+def test_discover_all_markets_keeps_offmarket(tmp_path):
+    spyfile = tmp_path / "spy.html"
+    spyfile.write_text("<html><body><p>0DTE SPY options: opening range breakout on "
+                       "the S&P 500, buy calls, QQQ equity.</p></body></html>")
+    stub = lambda q, n: [str(spyfile)]
+    out = Scout().discover("orb", root=str(tmp_path), markets=["GBPUSD"],
+                           max_results=5, test=False, fx_only=False, searcher=stub)
+    assert len(out["results"]) == 1 and out["skipped"] == []   # gate off -> kept
+
+
 def test_scout_discover_pipeline_with_stub_searcher(tmp_path):
     # write two local "articles"; the stub searcher returns their paths as if URLs
     a = tmp_path / "orb.html"
@@ -126,7 +161,7 @@ def test_scout_discover_pipeline_with_stub_searcher(tmp_path):
                  "</body></html>")
     stub = lambda q, n: [str(a), str(b)][:n]
     out = Scout().discover("breakouts", root=str(tmp_path), markets=["GBPUSD"],
-                           max_results=2, test=False, searcher=stub)
+                           max_results=2, test=False, fx_only=False, searcher=stub)
     assert out["query"] == "breakouts"
     templates = sorted(r["template"] for r in out["results"])
     assert templates == ["breakout", "orb"]
@@ -143,7 +178,7 @@ def test_scout_discover_captures_bad_sources(tmp_path):
     baddir.mkdir()
     stub = lambda q, n: [str(baddir), str(good)]
     out = Scout().discover("x", root=str(tmp_path), markets=["GBPUSD"],
-                           max_results=5, test=False, searcher=stub)
+                           max_results=5, test=False, fx_only=False, searcher=stub)
     # the bad source is captured as an error; the good one still scouts — the
     # sweep never crashes on one dead source
     assert len(out["results"]) == 1 and out["results"][0]["template"] == "breakout"

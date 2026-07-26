@@ -44,7 +44,50 @@ After searching, return STRICT JSON only — no prose — as an array:
 [{"url": "...", "title": "...", "why": "one line on what rule set it describes"}]
 """
 
+_FX_PROMPT = """\
+Search the web for articles describing concrete, backtestable **forex / currency**
+trading strategies about: %s
+
+Requirements:
+- The strategy must be applicable to spot FX currency pairs (e.g. GBP/USD,
+  USD/JPY), intraday or swing. Rules should be specific (indicators, periods,
+  entry/exit, stop, target).
+- EXCLUDE strategies specific to stocks, ETFs, options (0DTE/SPY/QQQ), or crypto
+  — we can only fairly test forex here. If a piece is really an equity/options
+  strategy, do not include it.
+
+Find up to %d good forex sources. After searching, return STRICT JSON only — no
+prose — as an array:
+[{"url": "...", "title": "...", "why": "one line on the forex rule set"}]
+"""
+
 _URL_RE = re.compile(r"https?://[^\s\"'<>)\]]+")
+
+# --- FX-applicability guard -------------------------------------------------
+# Discovery is FX-only for now: we only test on GBPUSD/USDJPY spot data, so an
+# equity/options strategy tested here would be an unfair, off-market probe. We
+# bias the search toward forex AND gate each fetched article, so a stray
+# equities/0DTE piece is skipped (with a reason) rather than silently mislabelled.
+_FX_MARKERS = ["forex", "fx ", "currency", "currencies", "pip", "pips",
+               "eur/usd", "eurusd", "gbp/usd", "gbpusd", "usd/jpy", "usdjpy",
+               "gbp/jpy", "currency pair", "spot fx"]
+_OFFMARKET_MARKERS = ["spy", "qqq", "0dte", "0 dte", "s&p 500", "s&p500",
+                      "nasdaq", "call option", "put option", "options strategy",
+                      "shares", "stock market", "equities", "equity", "etf",
+                      "iron condor", "ticker "]
+
+
+def is_fx_source(text: str) -> bool:
+    """Heuristic: does this article describe something applicable to spot FX?
+
+    True if forex markers are present and clearly outweigh equity/options ones.
+    Conservative — when a piece is dominated by SPY/options/equity language it is
+    treated as off-market so we don't test it on the wrong instrument.
+    """
+    low = text.lower()
+    fx = sum(low.count(m) for m in _FX_MARKERS)
+    off = sum(low.count(m) for m in _OFFMARKET_MARKERS)
+    return fx > 0 and fx >= off
 
 
 def _http_only(urls: List[str]) -> List[str]:
@@ -97,7 +140,8 @@ def urls_from_message(msg) -> List[str]:
 
 
 def anthropic_searcher(model: str = "claude-opus-5", max_searches: int = 5,
-                       max_tokens: int = 4096) -> Callable[[str, int], List[str]]:
+                       max_tokens: int = 4096,
+                       fx_only: bool = True) -> Callable[[str, int], List[str]]:
     """Return a ``searcher(query, max_results) -> [url, ...]`` backed by the
     Anthropic web-search server tool. Requires the ``anthropic`` package and an
     ANTHROPIC_API_KEY. Raises on any failure so callers can degrade gracefully.
@@ -116,9 +160,11 @@ def anthropic_searcher(model: str = "claude-opus-5", max_searches: int = 5,
     tools = [{"type": "web_search_20260209", "name": "web_search",
               "max_uses": max_searches}]
 
+    prompt = _FX_PROMPT if fx_only else _PROMPT
+
     def searcher(query: str, max_results: int = 5) -> List[str]:
         messages = [{"role": "user",
-                     "content": _PROMPT % (query, max_results)}]
+                     "content": prompt % (query, max_results)}]
         resp = client.messages.create(model=model, max_tokens=max_tokens,
                                        system=_SYSTEM, tools=tools,
                                        messages=messages)

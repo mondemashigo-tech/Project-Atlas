@@ -29,11 +29,12 @@ class Scout:
         self.extractor = extractor
 
     def scout(self, source: str, root: str = ".", markets: List[str] = None,
-              data_split: Dict = None, name: str = None) -> Dict:
+              data_split: Dict = None, name: str = None, text: str = None) -> Dict:
         """Fetch a source, extract rules, build a pre-registered hypothesis, store
         a knowledge note, and write the hypothesis YAML under hypotheses/scouted/.
-        Returns a summary (does not test)."""
-        text = fetch(source)
+        Returns a summary (does not test). `text` lets a caller pass already-fetched
+        content so a URL isn't fetched twice."""
+        text = text if text is not None else fetch(source)
         extracted = extract_rules(text, self.extractor)
         extracted["source"] = source
         markets = markets or ["GBPUSD", "USDJPY"]
@@ -59,10 +60,10 @@ class Scout:
 
     def scout_and_test(self, source: str, root: str = ".", markets: List[str] = None,
                        data_utc_offset: float = 0, data_split: Dict = None,
-                       name: str = None) -> Dict:
+                       name: str = None, text: str = None) -> Dict:
         """Scout an idea and immediately run it through the full council."""
         from ..kernel import Orchestrator
-        info = self.scout(source, root, markets, data_split, name)
+        info = self.scout(source, root, markets, data_split, name, text=text)
         res = Orchestrator(root).run(info["path"], window="out_sample",
                                      data_utc_offset=data_utc_offset)
         info.update({"verdict": res["experiment"].verdict,
@@ -73,29 +74,42 @@ class Scout:
 
     def discover(self, query: str, root: str = ".", markets: List[str] = None,
                  max_results: int = 5, test: bool = False,
-                 data_utc_offset: float = 0,
+                 data_utc_offset: float = 0, fx_only: bool = True,
                  searcher: Optional[Callable[[str, int], List[str]]] = None) -> Dict:
         """Find candidate articles for a topic, then scout (and optionally test)
         each one. `searcher(query, max_results)->[url,...]` is injectable; by
         default it uses the Anthropic web-search server tool.
 
-        Returns {"query", "urls", "results":[per-source dict], "errors":[...]}.
+        With `fx_only` (default), each source is fetched once and gated: pieces
+        that read as equity/options/crypto rather than spot FX are skipped, so we
+        never test an off-market idea on GBPUSD/USDJPY and mislabel the result.
+
+        Returns {"query", "urls", "results":[...], "skipped":[...], "errors":[...]}.
         Individual source failures are captured, never fatal — the sweep goes on.
         """
         if searcher is None:
             from .discover import anthropic_searcher
-            searcher = anthropic_searcher()
+            searcher = anthropic_searcher(fx_only=fx_only)
         urls = searcher(query, max_results)
 
-        results, errors = [], []
+        results, skipped, errors = [], [], []
         for url in urls:
             try:
+                text = fetch(url)
+                if fx_only:
+                    from .discover import is_fx_source
+                    if not is_fx_source(text):
+                        skipped.append({"url": url,
+                                        "reason": "off-market (not spot FX)"})
+                        continue
                 if test:
                     info = self.scout_and_test(url, root, markets,
-                                               data_utc_offset=data_utc_offset)
+                                               data_utc_offset=data_utc_offset,
+                                               text=text)
                 else:
-                    info = self.scout(url, root, markets)
+                    info = self.scout(url, root, markets, text=text)
                 results.append(info)
             except Exception as e:               # a dead link mustn't stop the sweep
                 errors.append({"url": url, "error": f"{type(e).__name__}: {e}"})
-        return {"query": query, "urls": urls, "results": results, "errors": errors}
+        return {"query": query, "urls": urls, "results": results,
+                "skipped": skipped, "errors": errors}
