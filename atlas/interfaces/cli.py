@@ -172,6 +172,39 @@ def _monitor(args):
         reg.close()
 
 
+def _dashboard(args):
+    import os as _os
+    from . import dashboard as dash
+    if args.serve:
+        import http.server
+        root, port, refresh = args.root, args.port, args.refresh
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = dash.render(root, refresh_secs=refresh).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", port), H)
+        print(f"Atlas dashboard live at  http://127.0.0.1:{port}  "
+              f"(auto-refresh {refresh}s)\nPress Ctrl+C to stop.")
+        try:
+            srv.serve_forever()
+        except KeyboardInterrupt:
+            print("\nstopped.")
+    else:
+        out = _os.path.join(args.root, "atlas_dashboard.html")
+        with open(out, "w", encoding="utf-8") as f:
+            f.write(dash.render(args.root))
+        print(f"wrote {out}  — open it in a browser (re-run to refresh)")
+
+
 def _architect(args):
     from ..agents import Architect
     store = MemoryStore(args.root)
@@ -265,6 +298,12 @@ def main(argv=None):
 
     ar = sub.add_parser("architect", help="lab health + structural suggestions")
     ar.set_defaults(func=_architect)
+
+    db = sub.add_parser("dashboard", help="visual dashboard of the live lab state")
+    db.add_argument("--serve", action="store_true", help="run a live local web server")
+    db.add_argument("--port", type=int, default=8787)
+    db.add_argument("--refresh", type=int, default=15, help="serve auto-refresh seconds")
+    db.set_defaults(func=_dashboard)
 
     lp = sub.add_parser("loop", help="governed research loop (propose->test->record)")
     lp.add_argument("base", help="base hypothesis YAML")

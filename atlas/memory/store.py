@@ -223,6 +223,11 @@ class MemoryStore:
         return json.loads(row["json"]) if row else default
 
     # ---- knowledge ---------------------------------------------------------
+    def list_knowledge(self) -> List[KnowledgeNote]:
+        rows = self._conn.execute(
+            "SELECT json FROM knowledge ORDER BY created_at DESC").fetchall()
+        return [KnowledgeNote.from_dict(json.loads(r["json"])) for r in rows]
+
     def write_knowledge(self, note: KnowledgeNote) -> KnowledgeNote:
         self._conn.execute(
             "INSERT OR REPLACE INTO knowledge VALUES (?,?,?,?,?)",
