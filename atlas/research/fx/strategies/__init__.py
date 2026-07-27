@@ -7,3 +7,4 @@ from . import trend_continuation  # noqa: F401
 from . import mean_reversion      # noqa: F401
 from . import breakout            # noqa: F401
 from . import orb                 # noqa: F401
+from . import composed            # noqa: F401

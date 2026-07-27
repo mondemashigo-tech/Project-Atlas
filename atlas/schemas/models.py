@@ -133,7 +133,11 @@ class Hypothesis:
         """Build a Hypothesis from a loaded FX hypothesis YAML (the existing
         research module's config), mapping its blocks onto the schema."""
         spec = {k: cfg[k] for k in ("trend", "entry", "meanrev", "breakout",
-                                    "weekdays", "costs", "template") if k in cfg}
+                                    "orb", "weekdays", "costs", "template",
+                                    # composed strategies: the invented rules ARE
+                                    # the identity — they must be pre-registered.
+                                    "features", "entry_long", "entry_short",
+                                    "exit") if k in cfg}
         filters = {k: cfg[k] for k in ("news_filter", "carry") if k in cfg}
         h = cls(
             id=new_id("HYP"),

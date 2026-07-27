@@ -194,6 +194,44 @@ def _discover(args):
         print("\nrun the whole batch through the council with --test next time.")
 
 
+def _invent(args):
+    import yaml
+    from ..agents.inventor import Inventor
+    generator = None
+    want_llm = args.llm or (not args.no_llm and os.environ.get("ANTHROPIC_API_KEY"))
+    if want_llm:
+        from ..agents.inventor import anthropic_generator
+        try:
+            generator = anthropic_generator(model=args.llm_model)
+            print(f"  designer : LLM ({args.llm_model})")
+        except Exception as e:
+            print(f"  designer : seeded library (LLM unavailable: {e})")
+    else:
+        print("  designer : seeded library")
+
+    cfgs = Inventor(generator).invent(theme=args.theme, markets=args.markets,
+                                      n=args.n)
+    if not cfgs:
+        print("no valid strategies invented.")
+        return
+    d = os.path.join(args.root, "hypotheses", "invented")
+    os.makedirs(d, exist_ok=True)
+    print(f"invented {len(cfgs)} composed strateg(ies) on theme {args.theme!r}:")
+    for cfg in cfgs:
+        path = os.path.join(d, f"{cfg['name']}.yaml")
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
+        print(f"\n  {cfg['name']}  — {cfg.get('note', 'composed')}")
+        print(f"      hypothesis -> {path}")
+        if args.test:
+            res = Orchestrator(args.root).run(path, window="out_sample",
+                                              data_utc_offset=args.data_utc_offset)
+            print(f"      VERDICT {res['experiment'].verdict} "
+                  f"(reached {res['reached_layer']}, advanced={res['advanced']})")
+    if not args.test:
+        print("\n  test them:  py -m atlas council <path> --window out_sample")
+
+
 def _ingest(args):
     from ..agents import Librarian
     store = MemoryStore(args.root)
@@ -426,6 +464,21 @@ def main(argv=None):
     dc.add_argument("--llm-model", default="claude-opus-5", dest="llm_model",
                     help="model for search + reader (default: claude-opus-5)")
     dc.set_defaults(func=_discover)
+
+    iv = sub.add_parser("invent",
+                        help="Inventor: design NEW composed strategies (mix indicators)")
+    iv.add_argument("theme", nargs="?", default="",
+                    help="a theme, e.g. 'trend plus momentum' or 'volatility mean reversion'")
+    iv.add_argument("--markets", nargs="+", default=["GBPUSD", "USDJPY"])
+    iv.add_argument("--n", type=int, default=3, help="how many to invent (default 3)")
+    iv.add_argument("--test", action="store_true", help="run each through the council")
+    iv.add_argument("--data-utc-offset", type=float, default=0, dest="data_utc_offset")
+    iv.add_argument("--llm", action="store_true",
+                    help="use the LLM designer (needs ANTHROPIC_API_KEY)")
+    iv.add_argument("--no-llm", action="store_true",
+                    help="use the seeded archetype library only")
+    iv.add_argument("--llm-model", default="claude-opus-5", dest="llm_model")
+    iv.set_defaults(func=_invent)
 
     ig = sub.add_parser("ingest", help="Librarian: ingest a file/dir into knowledge")
     ig.add_argument("path")

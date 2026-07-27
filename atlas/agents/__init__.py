@@ -9,6 +9,7 @@ from .historian import Historian
 from .architect import Architect
 from .librarian import Librarian
 from .scientist import Scientist
+from .inventor import Inventor
 
 __all__ = ["Agent", "AgentContext", "Skeptic", "Reporter", "Statistician",
-           "Historian", "Architect", "Librarian", "Scientist"]
+           "Historian", "Architect", "Librarian", "Scientist", "Inventor"]
