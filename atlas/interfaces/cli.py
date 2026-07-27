@@ -232,6 +232,25 @@ def _invent(args):
         print("\n  test them:  py -m atlas council <path> --window out_sample")
 
 
+def _live(args):
+    try:
+        import uvicorn
+    except ImportError:
+        print("Atlas Live needs FastAPI + uvicorn. Install with:\n"
+              "  py -m pip install fastapi \"uvicorn[standard]\"")
+        return
+    from ..live import create_app
+    app = create_app(args.root, allow_run=not args.no_run)
+    host = "0.0.0.0" if args.lan else "127.0.0.1"
+    shown = host if host != "0.0.0.0" else "<your-LAN-ip>"
+    if args.lan:
+        print("⚠ LAN mode: Atlas Live has no authentication. Only use on a "
+              "network you trust.")
+    print(f"Atlas Live at  http://{'127.0.0.1' if not args.lan else shown}:{args.port}"
+          f"   (Ctrl+C to stop)")
+    uvicorn.run(app, host=host, port=args.port, log_level="warning")
+
+
 def _ingest(args):
     from ..agents import Librarian
     store = MemoryStore(args.root)
@@ -459,6 +478,14 @@ def main(argv=None):
                     help="use the seeded archetype library only")
     iv.add_argument("--llm-model", default="claude-opus-5", dest="llm_model")
     iv.set_defaults(func=_invent)
+
+    lv = sub.add_parser("live", help="Atlas Live: interactive web app (FastAPI)")
+    lv.add_argument("--port", type=int, default=8800)
+    lv.add_argument("--lan", action="store_true",
+                    help="bind 0.0.0.0 for LAN access (no auth — trusted networks only)")
+    lv.add_argument("--no-run", action="store_true",
+                    help="disable the research-run trigger (read-only instance)")
+    lv.set_defaults(func=_live)
 
     ig = sub.add_parser("ingest", help="Librarian: ingest a file/dir into knowledge")
     ig.add_argument("path")

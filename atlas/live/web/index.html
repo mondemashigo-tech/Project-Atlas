@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas Live</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="atlas-dot" id="atlas-dot" title="system status"></span>
+      <strong>ATLAS</strong><span class="brand-sub">LIVE</span>
+    </div>
+    <nav class="nav" id="nav">
+      <a href="#chamber" class="nav-link active">Council</a>
+      <a href="#console" class="nav-link">Console</a>
+      <a href="#experiments" class="nav-link">Experiments</a>
+      <a href="#registry" class="nav-link">Registry</a>
+      <a href="#graveyard" class="nav-link">Graveyard</a>
+      <a href="#knowledge" class="nav-link">Knowledge</a>
+      <a href="#governance" class="nav-link">Governance</a>
+      <a href="#brief" class="nav-link">Brief</a>
+    </nav>
+    <div class="conn" id="conn"><span class="conn-dot"></span><span id="conn-label">connecting…</span></div>
+  </header>
+
+  <main id="view" class="view"></main>
+
+  <!-- Chat dock -->
+  <aside class="chat-dock" id="chat-dock" aria-label="Ask Atlas">
+    <div class="chat-head">
+      <span>Ask Atlas</span>
+      <button class="icon-btn" id="chat-toggle" title="collapse">▾</button>
+    </div>
+    <div class="chat-body" id="chat-body"></div>
+    <form class="chat-form" id="chat-form">
+      <input id="chat-input" type="text" autocomplete="off"
+             placeholder="e.g. why was EXP-… rejected?  ·  what happened overnight?">
+      <button type="button" class="icon-btn" id="mic-btn" title="speak">🎤</button>
+      <button type="submit" class="send-btn">Send</button>
+    </form>
+    <div class="chat-foot">
+      <label><input type="checkbox" id="tts-toggle"> speak replies</label>
+      <span id="mic-state" class="muted"></span>
+    </div>
+  </aside>
+
+  <div id="drawer" class="drawer" hidden><div class="drawer-inner" id="drawer-inner"></div></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

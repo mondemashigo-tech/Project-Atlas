@@ -59,6 +59,10 @@ class MemoryStore:
             metadata TEXT, source_module TEXT, is_historical INTEGER, created_at TEXT);
         CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id);
         CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY, created_at TEXT, transcript_source TEXT,
+            routed_agent TEXT, user_message TEXT, answer TEXT,
+            citations TEXT, records TEXT);
         """)
         c.commit()
 
@@ -184,6 +188,29 @@ class MemoryStore:
     def latest_event_seq(self) -> int:
         row = self._conn.execute("SELECT MAX(seq) AS m FROM events").fetchone()
         return int(row["m"]) if row and row["m"] is not None else 0
+
+    # ---- conversations (grounded chat history) -----------------------------
+    def write_conversation(self, convo: dict) -> dict:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO conversations (id, created_at,"
+            " transcript_source, routed_agent, user_message, answer, citations,"
+            " records) VALUES (?,?,?,?,?,?,?,?)",
+            (convo["id"], convo.get("created_at"), convo.get("transcript_source"),
+             convo.get("routed_agent"), convo.get("user_message"),
+             convo.get("answer"), json.dumps(convo.get("citations", [])),
+             json.dumps(convo.get("records", [])[:50])))
+        self._conn.commit()
+        return convo
+
+    def get_conversation(self, cid: str) -> Optional[dict]:
+        row = self._conn.execute(
+            "SELECT * FROM conversations WHERE id=?", (cid,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["citations"] = json.loads(d.get("citations") or "[]")
+        d["records"] = json.loads(d.get("records") or "[]")
+        return d
 
     # ---- snapshots ---------------------------------------------------------
     def get_snapshot_by_hash(self, source: str, chash: str) -> Optional[DataSnapshot]:

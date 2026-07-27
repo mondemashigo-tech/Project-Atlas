@@ -6,3 +6,8 @@ pytest>=7.0
 # Optional: only needed for the Scout's LLM reader (`atlas scout --llm`).
 # The core lab runs without it; extraction falls back to the heuristic reader.
 # anthropic>=0.40
+
+# Optional: only needed for the Atlas Live web app (`atlas live`).
+# The core lab and CLI run without these.
+# fastapi>=0.110
+# uvicorn[standard]>=0.29
