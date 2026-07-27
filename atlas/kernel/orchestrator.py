@@ -40,9 +40,13 @@ class Orchestrator:
     def run(self, hyp_path: str, window: str = "out_sample",
             narrator: Optional[Callable[[str], str]] = None,
             risk_policy: Optional[RiskPolicy] = None,
-            data_utc_offset: float = 0) -> dict:
+            data_utc_offset: float = 0, bus=None) -> dict:
+        from ..events import Event
+        from ..events.bus import NullBus
+        bus = bus or NullBus()             # no bus -> engine behaves exactly as before
         store = MemoryStore(self.root)
         decisions = []
+        tid = None
 
         def emit(agent, phase, decision, evidence, conf="medium", nxt="", title=""):
             rec = DecisionRecord(task_id=tid, agent=agent, phase=phase,
@@ -52,13 +56,32 @@ class Orchestrator:
             decisions.append(rec)
             return rec
 
+        def ev(event_type, agent_name=None, **kw):
+            bus.publish(Event(
+                event_type=event_type, agent_name=agent_name,
+                agent_id=(agent_name.lower() if agent_name else None),
+                task_id=tid, source_module="kernel.orchestrator", **kw))
+
         try:
+            ev("experiment_started", status="started",
+               title=f"council run: {os.path.basename(hyp_path)}",
+               summary=f"window={window}",
+               metadata={"hyp_path": hyp_path, "window": window})
+            ev("agent_started", agent_name="Backtester", status="started",
+               title="deterministic backtest")
             # Layers 1–3 are realised by running the deterministic engine + provenance.
             hyp, rec, verdict = service.run_experiment(
                 hyp_path, root=self.root, window=window,
                 data_utc_offset=data_utc_offset)
             tid = hyp.id
             snap = store.get_snapshot(rec.data_snapshot_id)
+            metrics = rec.metrics or {}
+            ev("backtest_completed", agent_name="Backtester", status="completed",
+               hypothesis_id=hyp.id, experiment_id=rec.id,
+               title=f"backtest {rec.id}", summary=f"verdict {rec.verdict}",
+               evidence_refs=[rec.id, rec.data_snapshot_id],
+               metadata={"verdict": rec.verdict, "trades": metrics.get("trades"),
+                         "engine_version": rec.engine_version})
 
             # 1. data integrity
             rows = snap.row_count if snap else 0
@@ -78,16 +101,39 @@ class Orchestrator:
                                verdict=verdict, extras={"decisions": decisions})
 
             # Novelty check — the Historian (has this exact idea been tested?)
+            ev("agent_started", agent_name="Historian", status="started",
+               hypothesis_id=hyp.id, experiment_id=rec.id, title="novelty check")
             hist = Historian(store, narrator).run(ctx)
             store.write_decision(hist); decisions.append(hist)
+            ev("agent_completed", agent_name="Historian", status="completed",
+               hypothesis_id=hyp.id, experiment_id=rec.id,
+               title="novelty check", summary=hist.decision, evidence_refs=[rec.id])
 
             # 4. statistical validity — Statistician quantifies, Skeptic judges.
+            ev("agent_started", agent_name="Statistician", status="started",
+               hypothesis_id=hyp.id, experiment_id=rec.id, title="statistical review")
             stat = Statistician(narrator).run(ctx)
             store.write_decision(stat); decisions.append(stat)
             ctx.extras["statistician"] = stat
+            ev("agent_completed", agent_name="Statistician", status="completed",
+               hypothesis_id=hyp.id, experiment_id=rec.id,
+               title="statistical review", summary=stat.decision,
+               evidence_refs=[rec.id])
+            ev("agent_started", agent_name="Skeptic", status="started",
+               hypothesis_id=hyp.id, experiment_id=rec.id, title="skeptical review")
             skeptic = Skeptic(narrator).run(ctx)
             store.write_decision(skeptic)
             decisions.append(skeptic)
+            if skeptic.decision == "reject":
+                ev("skeptic_rejected", agent_name="Skeptic", status="completed",
+                   severity="warning", hypothesis_id=hyp.id, experiment_id=rec.id,
+                   title="skeptic rejected", summary=skeptic.evidence[:200],
+                   evidence_refs=[rec.id])
+            else:
+                ev("agent_completed", agent_name="Skeptic", status="completed",
+                   hypothesis_id=hyp.id, experiment_id=rec.id,
+                   title="skeptical review", summary=skeptic.decision,
+                   evidence_refs=[rec.id])
 
             reached = "statistical_validity"
             advanced = False
@@ -101,6 +147,12 @@ class Orchestrator:
                  "burned" if budget["burned"] else "ok",
                  f"OOS looks {budget['count']}/{budget['budget']} on "
                  f"{rec.data_snapshot_id}", title=hyp.title)
+            ev("governance_checked", agent_name="Orchestrator", status="completed",
+               severity="warning" if budget["burned"] else "info",
+               hypothesis_id=hyp.id, experiment_id=rec.id, title="governance check",
+               summary=f"OOS looks {budget['count']}/{budget['budget']}",
+               metadata={"burned": budget["burned"], "count": budget["count"],
+                         "budget": budget["budget"]})
 
             if skeptic.decision == "reject":
                 store.bury(hyp.id, reason="Skeptic reject: " + skeptic.evidence[:200])
@@ -140,6 +192,12 @@ class Orchestrator:
                             candidate_id = cand.strategy_id
                         finally:
                             reg.close()
+                        ev("hypothesis_registered", agent_name="Orchestrator",
+                           status="completed", hypothesis_id=hyp.id,
+                           experiment_id=rec.id, strategy_id=candidate_id,
+                           title="candidate registered",
+                           summary="non-capital candidate; promotion is human-gated",
+                           evidence_refs=[candidate_id, rec.id])
                         emit("Orchestrator", "deployment_validity", "hold",
                              f"registered candidate {candidate_id}; promotion to "
                              f"paper/live requires a human approval token",
@@ -149,10 +207,22 @@ class Orchestrator:
 
             # Reporter memo (records the whole chain)
             ctx.extras["decisions"] = decisions
+            ev("agent_started", agent_name="Reporter", status="started",
+               hypothesis_id=hyp.id, experiment_id=rec.id, title="writing memo")
             reporter = Reporter(narrator, vault=os.path.join(self.root, "vault"))
             rep = reporter.run(ctx)
             store.write_decision(rep)
             decisions.append(rep)
+            ev("report_completed", agent_name="Reporter", status="completed",
+               hypothesis_id=hyp.id, experiment_id=rec.id, title="memo written",
+               summary=rep.evidence, evidence_refs=[rep.evidence])
+
+            ev("experiment_completed", agent_name="Orchestrator", status="completed",
+               hypothesis_id=hyp.id, experiment_id=rec.id, strategy_id=candidate_id,
+               title=f"run complete: {rec.verdict}",
+               summary=halt, evidence_refs=[rec.id],
+               metadata={"verdict": rec.verdict, "reached_layer": reached,
+                         "advanced": advanced, "candidate_id": candidate_id})
 
             return {
                 "hypothesis": hyp, "experiment": rec, "verdict": verdict,
@@ -160,5 +230,9 @@ class Orchestrator:
                 "reached_layer": reached, "candidate_id": candidate_id,
                 "halt_reason": halt, "memo": rep.evidence,
             }
+        except Exception as exc:
+            ev("system_error", severity="error", status="blocked",
+               title="orchestrator run failed", summary=f"{type(exc).__name__}: {exc}")
+            raise
         finally:
             store.close()

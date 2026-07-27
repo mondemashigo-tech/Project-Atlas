@@ -49,6 +49,16 @@ class MemoryStore:
             hypothesis_id TEXT PRIMARY KEY, title TEXT, reason TEXT, at TEXT);
         CREATE TABLE IF NOT EXISTS policy (
             key TEXT PRIMARY KEY, json TEXT, updated_at TEXT, updated_by TEXT);
+        CREATE TABLE IF NOT EXISTS events (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT UNIQUE, event_type TEXT, timestamp_utc TEXT,
+            agent_id TEXT, agent_name TEXT, task_id TEXT, cycle_id TEXT,
+            hypothesis_id TEXT, experiment_id TEXT, strategy_id TEXT,
+            severity TEXT, status TEXT, title TEXT, summary TEXT,
+            evidence_refs TEXT, progress_current INTEGER, progress_total INTEGER,
+            metadata TEXT, source_module TEXT, is_historical INTEGER, created_at TEXT);
+        CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id);
+        CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
         """)
         c.commit()
 
@@ -136,6 +146,44 @@ class MemoryStore:
         else:
             rows = self._conn.execute("SELECT json FROM decisions ORDER BY id").fetchall()
         return [DecisionRecord.from_dict(json.loads(r["json"])) for r in rows]
+
+    # ---- events (Atlas Live typed event spine) -----------------------------
+    def write_event(self, event) -> object:
+        """Persist an Event, assigning its monotonic stream cursor (seq)."""
+        cur = self._conn.execute(
+            "INSERT INTO events (event_id, event_type, timestamp_utc, agent_id,"
+            " agent_name, task_id, cycle_id, hypothesis_id, experiment_id,"
+            " strategy_id, severity, status, title, summary, evidence_refs,"
+            " progress_current, progress_total, metadata, source_module,"
+            " is_historical, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            event.to_row())
+        self._conn.commit()
+        event.seq = cur.lastrowid
+        return event
+
+    def list_events(self, after_seq: int = 0, task_id: str = None,
+                    event_type: str = None, agent_id: str = None,
+                    severity: str = None, limit: int = 500) -> List:
+        """Events with seq > after_seq, oldest first (stream/replay order).
+        Optional filters narrow by task, type, agent, or severity."""
+        from ..events.model import Event
+        clauses = ["seq > ?"]
+        params: list = [int(after_seq or 0)]
+        for col, val in (("task_id", task_id), ("event_type", event_type),
+                         ("agent_id", agent_id), ("severity", severity)):
+            if val is not None:
+                clauses.append(f"{col}=?")
+                params.append(val)
+        params.append(int(limit))
+        rows = self._conn.execute(
+            "SELECT * FROM events WHERE " + " AND ".join(clauses) +
+            " ORDER BY seq LIMIT ?", params).fetchall()
+        return [Event.from_row(r) for r in rows]
+
+    def latest_event_seq(self) -> int:
+        row = self._conn.execute("SELECT MAX(seq) AS m FROM events").fetchone()
+        return int(row["m"]) if row and row["m"] is not None else 0
 
     # ---- snapshots ---------------------------------------------------------
     def get_snapshot_by_hash(self, source: str, chash: str) -> Optional[DataSnapshot]:
