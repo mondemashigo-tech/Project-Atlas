@@ -205,6 +205,20 @@ def create_app(root: str = ".", allow_run: bool = True) -> FastAPI:
     def pulse_clear_kill():
         return app.state.pulse.clear_kill()
 
+    @app.post("/api/pulse/arm")
+    def pulse_arm(body: ChatIn):
+        try:
+            return app.state.pulse.arm(body.message)      # message = hypothesis name
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/pulse/replay")
+    def pulse_replay(body: ChatIn):
+        try:
+            return app.state.pulse.replay(body.message, hub=app.state.hub)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
     # ---- frontend ----------------------------------------------------------
     if os.path.isdir(_WEB):
         app.mount("/static", StaticFiles(directory=_WEB), name="static")

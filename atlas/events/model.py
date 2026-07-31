@@ -35,6 +35,12 @@ EVENT_TYPES = {
     "governance_checked",
     "system_warning",
     "system_error",
+    # practical market loop (executor / Pulse)
+    "strategy_armed",
+    "signal_generated",
+    "paper_fill",
+    "position_closed",
+    "order_blocked",
 }
 
 SEVERITIES = {"info", "warning", "error"}

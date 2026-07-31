@@ -323,6 +323,36 @@ async function pulse() {
     .forEach(([k, val]) => grid.appendChild(el('div', 'card', `<h3>${k}</h3><div class="stat" style="font-size:20px">${esc(val)}</div>`)));
   v.appendChild(grid);
 
+  // arm a strategy — gated behind its research verdict
+  const arm = el('div', 'card'); arm.style.marginTop = '14px';
+  const armed = s.armed_strategy;
+  arm.innerHTML = `<h3>arm a strategy (only trades if research cleared it)</h3>
+    <div class="row"><input class="input" id="arm-hyp" placeholder="hypothesis name (e.g. bos_retrace_v0_1)" style="min-width:260px">
+      <button class="btn" id="arm-btn">Check clearance</button>
+      <button class="btn primary" id="replay-btn">Paper-trade on history</button></div>
+    <div id="arm-msg" class="muted" style="margin-top:8px">${armed
+      ? `${esc(armed.name)}: <b class="${armed.armed ? 'v-PASS' : 'v-REJECT'}">${armed.armed ? 'ARMED' : 'BLOCKED'}</b> — ${esc(armed.clearance.reason)}` : ''}</div>`;
+  v.appendChild(arm);
+  const post = (path, name) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: name }) });
+  $('#arm-btn').onclick = async () => {
+    const n = $('#arm-hyp').value.trim(); if (!n) return;
+    $('#arm-msg').textContent = 'checking…';
+    try { const r = await post('/api/pulse/arm', n);
+      $('#arm-msg').innerHTML = `${esc(r.name)}: <b class="${r.armed ? 'v-PASS' : 'v-REJECT'}">${r.armed ? 'ARMED' : 'BLOCKED'}</b> — ${esc(r.clearance.reason)}`;
+    } catch (e) { $('#arm-msg').textContent = 'error: ' + e.message; }
+  };
+  $('#replay-btn').onclick = async () => {
+    const n = $('#arm-hyp').value.trim(); if (!n) return;
+    $('#arm-msg').textContent = 'paper-trading on history…';
+    try { const r = await post('/api/pulse/replay', n);
+      if (r.ok === false) { $('#arm-msg').textContent = r.reason; return; }
+      $('#arm-msg').innerHTML = r.armed
+        ? `Done: ${r.fills} paper fills, ${r.closes} closes, balance ${Number(r.balance).toFixed(2)}. See the console.`
+        : `Blocked: ${esc(r.clearance.reason)} — ${r.blocked} signals observed but not traded.`;
+      location.hash = 'console';
+    } catch (e) { $('#arm-msg').textContent = 'error: ' + e.message; }
+  };
+
   // kill switch controls (activating is always safe; clearing re-enables non-live)
   const ctrl = el('div', 'row'); ctrl.style.marginTop = '16px';
   const killBtn = el('button', 'btn', s.kill_switch ? 'Clear kill switch' : '⛔ Activate kill switch');

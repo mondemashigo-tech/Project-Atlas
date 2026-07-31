@@ -19,10 +19,13 @@ from .broker import (AccountMode, BrokerAdapter, OrderRequest, OrderResult,
                      Position, AccountState, SymbolSpec)
 from .gate import CapitalGate, GateError
 from .paper import PaperBroker
+from .feed import ReplayFeed, MT5Feed
+from .executor import Executor, research_clearance
 
 __all__ = ["AccountMode", "BrokerAdapter", "OrderRequest", "OrderResult",
            "Position", "AccountState", "SymbolSpec", "CapitalGate", "GateError",
-           "PaperBroker", "make_mt5_broker"]
+           "PaperBroker", "make_mt5_broker", "ReplayFeed", "MT5Feed", "Executor",
+           "research_clearance"]
 
 
 def make_mt5_broker(*args, **kwargs):
