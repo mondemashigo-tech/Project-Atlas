@@ -44,7 +44,7 @@ const currentView = () => (location.hash.replace('#', '') || 'chamber').split('/
 function route() {
   const v = currentView();
   $$('.nav-link').forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + v));
-  const views = { chamber, console: consoleView, experiments, registry, graveyard, knowledge, governance, brief };
+  const views = { chamber, console: consoleView, experiments, registry, graveyard, knowledge, governance, brief, pulse };
   (views[v] || chamber)();
 }
 window.addEventListener('hashchange', route);
@@ -295,6 +295,65 @@ async function brief() {
   v.appendChild(grid);
   const say = el('button', 'btn', '🔊 Read it to me'); say.style.marginTop = '14px';
   say.onclick = () => speak(b.text); v.appendChild(say);
+}
+
+/* ---------------- Atlas Pulse (cockpit) ---------------- */
+async function pulse() {
+  const v = $('#view'); v.innerHTML = '';
+  v.appendChild(el('h1', 'page-title', 'Atlas Pulse'));
+  v.appendChild(el('p', 'page-sub', 'Live trading cockpit. The mode is shown on every screen — only MICRO_LIVE / LIVE can ever send an order, and only through the gate.'));
+  let s; try { s = await api('/api/pulse'); } catch (e) { v.appendChild(el('div', 'empty', 'Pulse unavailable: ' + e.message)); return; }
+  const live = s.sends_orders;
+  const banner = el('div', 'card');
+  banner.style.borderColor = s.kill_switch ? 'var(--err)' : (live ? 'var(--warn)' : 'var(--ok)');
+  banner.innerHTML = `<h3>account mode</h3>
+    <div class="stat">${esc(s.mode)} ${s.kill_switch ? '· <span class="v-REJECT">KILL SWITCH ACTIVE</span>' : ''}</div>
+    <div class="muted">${s.kill_switch ? 'All orders blocked (persists across restart).'
+      : live ? 'This mode CAN send real orders — through the gate only.'
+      : 'No live orders can be sent in this mode.'}
+    ${s.broker_error ? '<br>broker: ' + esc(s.broker_error) : ''}</div>`;
+  v.appendChild(banner);
+
+  const acc = s.account || {};
+  const grid = el('div', 'cards grid'); grid.style.marginTop = '14px';
+  [['broker', s.broker], ['sends orders', String(s.sends_orders)],
+   ['balance', acc.balance ?? '—'], ['equity', acc.equity ?? '—'],
+   ['demo?', acc.is_demo == null ? '—' : String(acc.is_demo)],
+   ['unknown positions', (s.reconcile || {}).unknown_positions ?? '—']]
+    .forEach(([k, val]) => grid.appendChild(el('div', 'card', `<h3>${k}</h3><div class="stat" style="font-size:20px">${esc(val)}</div>`)));
+  v.appendChild(grid);
+
+  // kill switch controls (activating is always safe; clearing re-enables non-live)
+  const ctrl = el('div', 'row'); ctrl.style.marginTop = '16px';
+  const killBtn = el('button', 'btn', s.kill_switch ? 'Clear kill switch' : '⛔ Activate kill switch');
+  killBtn.style.borderColor = s.kill_switch ? 'var(--ok)' : 'var(--err)';
+  killBtn.onclick = async () => {
+    const path = s.kill_switch ? '/api/pulse/clear-kill' : '/api/pulse/kill';
+    if (!s.kill_switch && !confirm('Activate the kill switch? This blocks ALL orders until cleared.')) return;
+    await api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    pulse();
+  };
+  ctrl.appendChild(killBtn);
+  v.appendChild(ctrl);
+
+  // open positions
+  v.appendChild(el('h3', 'page-sub', 'Open positions'));
+  if ((s.positions || []).length) {
+    const t = el('div', 'scroll-x');
+    t.innerHTML = `<table><thead><tr><th>id</th><th>symbol</th><th>dir</th><th>vol</th><th>entry</th><th>P/L</th></tr></thead><tbody>${
+      s.positions.map(p => `<tr><td class="mono">${esc(p.position_id)}</td><td>${esc(p.symbol)}</td><td>${esc(p.direction)}</td><td>${esc(p.volume)}</td><td>${esc(p.entry)}</td><td>${esc(p.pnl)}</td></tr>`).join('')}</tbody></table>`;
+    v.appendChild(t);
+  } else { v.appendChild(el('div', 'empty', 'No open positions.')); }
+
+  // recent signals / intents
+  v.appendChild(el('h3', 'page-sub', 'Recent signals / intents'));
+  const intents = s.recent_intents || [];
+  if (intents.length) {
+    const t = el('div', 'scroll-x');
+    t.innerHTML = `<table><thead><tr><th>symbol</th><th>dir</th><th>vol</th><th>ref price</th><th>mode</th></tr></thead><tbody>${
+      intents.slice().reverse().map(i => `<tr><td>${esc(i.symbol)}</td><td>${esc(i.direction)}</td><td>${esc(i.volume)}</td><td>${esc(i.ref_price)}</td><td>${esc(i.mode)}</td></tr>`).join('')}</tbody></table>`;
+    v.appendChild(t);
+  } else { v.appendChild(el('div', 'empty', 'No signals yet. Connect MT5 (ATLAS_BROKER=mt5) and start an OBSERVE/PAPER session to see live activity.')); }
 }
 
 /* ---------------- agent drawer ---------------- */

@@ -52,6 +52,8 @@ def create_app(root: str = ".", allow_run: bool = True) -> FastAPI:
     app.state.root = root
     app.state.hub = Hub()
     app.state.runner = Runner(root, app.state.hub)
+    from .pulse import PulseManager
+    app.state.pulse = PulseManager(root)
 
     # ---- overview / health -------------------------------------------------
     @app.get("/api/overview")
@@ -188,6 +190,20 @@ def create_app(root: str = ".", allow_run: bool = True) -> FastAPI:
     @app.get("/api/research/status")
     def research_status():
         return app.state.runner.status()
+
+    # ---- Atlas Pulse (live trading cockpit) --------------------------------
+    @app.get("/api/pulse")
+    def pulse():
+        return app.state.pulse.status()
+
+    @app.post("/api/pulse/kill")
+    def pulse_kill(body: dict = None):
+        reason = (body or {}).get("reason", "manual (cockpit)")
+        return app.state.pulse.activate_kill(reason)
+
+    @app.post("/api/pulse/clear-kill")
+    def pulse_clear_kill():
+        return app.state.pulse.clear_kill()
 
     # ---- frontend ----------------------------------------------------------
     if os.path.isdir(_WEB):

@@ -22,4 +22,10 @@ from .paper import PaperBroker
 
 __all__ = ["AccountMode", "BrokerAdapter", "OrderRequest", "OrderResult",
            "Position", "AccountState", "SymbolSpec", "CapitalGate", "GateError",
-           "PaperBroker"]
+           "PaperBroker", "make_mt5_broker"]
+
+
+def make_mt5_broker(*args, **kwargs):
+    """Lazy factory so importing the package never requires MetaTrader5."""
+    from .mt5_broker import MT5Broker
+    return MT5Broker(*args, **kwargs)
