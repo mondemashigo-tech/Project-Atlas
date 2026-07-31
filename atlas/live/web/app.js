@@ -79,25 +79,60 @@ async function chamber() {
   const core = el('div', 'chamber-core',
     `<div class="core-orb idle" id="core-orb"></div><strong>ATLAS</strong>
      <span class="muted" id="core-status">idle</span>
-     <div class="row" style="margin-top:10px">
-       <input class="input" id="run-hyp" placeholder="hypothesis name (e.g. london_trend_continuation)" style="width:280px">
-       <button class="btn primary" id="run-btn">Run council</button>
-       <span class="muted" id="run-msg"></span></div>`);
+     <div class="run-panels">
+       <div class="run-panel">
+         <div class="run-label">Run an existing hypothesis</div>
+         <div class="row">
+           <select class="input" id="run-hyp" style="min-width:260px"><option value="">loading…</option></select>
+           <button class="btn primary" id="run-btn">Run council</button></div>
+       </div>
+       <div class="run-panel">
+         <div class="run-label">Test a new idea — describe it in plain English</div>
+         <div class="row">
+           <input class="input" id="idea-txt" style="flex:1;min-width:260px"
+             placeholder="e.g. sweep the prior swing high then enter short on a bearish close back inside range">
+           <button class="btn primary" id="idea-btn">Scout &amp; test</button></div>
+       </div>
+     </div>
+     <span class="muted" id="run-msg" style="margin-top:8px;display:block"></span>`);
   v.appendChild(core);
   v.appendChild(el('div', 'agent-grid', '<div id="agent-grid"></div>'));
   v.querySelector('.agent-grid').id = 'agent-grid';
   await refreshAgents(); paintAgents();
+  loadHypList();
   $('#run-btn').onclick = triggerRun;
+  $('#idea-btn').onclick = triggerIdea;
+}
+async function loadHypList() {
+  try {
+    const r = await api('/api/hypotheses'); const sel = $('#run-hyp');
+    const items = r.hypotheses || [];
+    sel.innerHTML = items.length
+      ? '<option value="">— pick a hypothesis —</option>' + items.map(h => `<option value="${esc(h.name)}">${esc(h.name)}</option>`).join('')
+      : '<option value="">no hypothesis files found under hypotheses/</option>';
+  } catch (e) { $('#run-hyp').innerHTML = '<option value="">could not load list</option>'; }
 }
 async function triggerRun() {
-  const name = $('#run-hyp').value.trim(); const msg = $('#run-msg');
-  if (!name) { msg.textContent = 'enter a hypothesis name'; return; }
+  const name = $('#run-hyp').value; const msg = $('#run-msg');
+  if (!name) { msg.textContent = 'pick a hypothesis from the list'; return; }
   msg.textContent = 'starting…';
   try {
     const r = await api('/api/research/run', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hypothesis: name }) });
-    msg.textContent = r.started ? 'running ' + r.hypothesis : (r.reason || 'not started');
-  } catch (e) { msg.textContent = 'error: ' + e.message + ' (is the name right / under hypotheses/?)'; }
+    msg.textContent = r.started ? 'running ' + r.hypothesis + ' — watch the console' : (r.reason || 'not started');
+    location.hash = 'console';
+  } catch (e) { msg.textContent = 'error: ' + e.message; }
+}
+async function triggerIdea() {
+  const idea = $('#idea-txt').value.trim(); const msg = $('#run-msg');
+  if (idea.length < 8) { msg.textContent = 'describe the idea in a bit more detail'; return; }
+  msg.textContent = 'scouting your idea…';
+  try {
+    const r = await api('/api/research/idea', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idea }) });
+    if (r.started) { msg.textContent = 'scouting + testing your idea — watch the console'; location.hash = 'console'; }
+    else { msg.textContent = r.reason || 'not started'; }
+  } catch (e) { msg.textContent = 'error: ' + e.message; }
 }
 
 /* ---------------- Live Console ---------------- */

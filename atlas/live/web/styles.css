@@ -81,6 +81,10 @@ code,.mono{font-family:var(--mono);font-size:.92em}
   background:conic-gradient(from 0deg,var(--accent),var(--accent-2),var(--accent));
   box-shadow:0 0 30px var(--accent-glow)}
 .core-orb.idle{filter:grayscale(.6) brightness(.7);box-shadow:none}
+.run-panels{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  width:100%;margin-top:14px}
+.run-panel{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.run-label{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:8px}
 .agent-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
 .agent{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
   padding:13px 14px;cursor:pointer;transition:border-color var(--dur),transform var(--dur)}

@@ -123,6 +123,40 @@ def _knowledge_about(store, message: str) -> Tuple[str, List[str], List[Dict]]:
     return facts, [n.id for n in hits[:6]], [n.to_dict() for n in hits[:6]]
 
 
+def _list_experiments(store) -> Tuple[str, List[str], List[Dict]]:
+    exps = store.list_experiments(limit=40)
+    if not exps:
+        return ("No experiments are recorded yet.", [], [])
+    facts = "Experiments (most recent first): " + "; ".join(
+        f"{e.id} {e.verdict} ({(e.metrics or {}).get('trades')} trades, "
+        f"PF {(e.metrics or {}).get('profit_factor')})" for e in exps[:20])
+    return facts, [e.id for e in exps[:20]], [e.to_dict() for e in exps[:20]]
+
+
+def _list_hypotheses(store) -> Tuple[str, List[str], List[Dict]]:
+    exps = store.list_experiments(limit=60)
+    rows, cites, seen = [], [], set()
+    for e in exps:
+        hid = e.hypothesis_id
+        if hid in seen:
+            continue
+        seen.add(hid)
+        h = store.get_hypothesis(hid)
+        title = h.title if h else "?"
+        status = h.status if h else "?"
+        rows.append({"hypothesis_id": hid, "title": title, "status": status,
+                     "last_verdict": e.verdict})
+        cites.append(hid)
+        if len(rows) >= 20:
+            break
+    if not rows:
+        return ("No hypotheses have been run yet.", [], [])
+    facts = "Hypotheses run: " + "; ".join(
+        f"{r['title']} ({r['hypothesis_id']}) [{r['status']}], last verdict "
+        f"{r['last_verdict']}" for r in rows)
+    return facts, cites, rows
+
+
 def _overview(store) -> Tuple[str, List[str], List[Dict]]:
     c = store.counts()
     facts = (f"Atlas has {c.get('experiments', 0)} experiments, "
@@ -149,6 +183,15 @@ def _route(message: str) -> str:
         return "why_rejected"
     if ids and "evidence" in m:
         return "evidence"
+    if any(w in m for w in ("list hypothes", "which hypothes", "what hypothes",
+                            "have you run", "what have you run", "what did you run",
+                            "which of the hypothes")):
+        return "list_hypotheses"
+    if any(w in m for w in ("list experiment", "retrieve the experiment",
+                            "retrieve experiment", "which experiment",
+                            "show me the experiment", "the experiments",
+                            "what experiments", "enumerate", "all experiments")):
+        return "list_experiments"
     if any(w in m for w in ("reject", "buried", "graveyard", "failed today")):
         return "recent_rejections"
     if any(w in m for w in ("researching", "running", "doing now", "currently",
@@ -177,6 +220,10 @@ def _retrieve(root: str, message: str, intent: str,
         if intent == "evidence":
             out = _evidence_for(store, ids)
             return out if out[0] else _overview(store)
+        if intent == "list_experiments":
+            return _list_experiments(store)
+        if intent == "list_hypotheses":
+            return _list_hypotheses(store)
         if intent == "recent_rejections":
             return _recent_rejections(store)
         if intent == "researching":

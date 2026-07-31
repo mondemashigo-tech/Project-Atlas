@@ -40,6 +40,12 @@ class RunIn(BaseModel):
     data_utc_offset: float = 0.0
 
 
+class IdeaIn(BaseModel):
+    idea: str = Field(min_length=8, max_length=4000)
+    window: str = "out_sample"
+    data_utc_offset: float = 0.0
+
+
 def create_app(root: str = ".", allow_run: bool = True) -> FastAPI:
     root = os.path.abspath(root)
     app = FastAPI(title="Atlas Live", version="0.1.0")
@@ -119,6 +125,10 @@ def create_app(root: str = ".", allow_run: bool = True) -> FastAPI:
             raise HTTPException(404, "unknown experiment")
         return d
 
+    @app.get("/api/hypotheses")
+    def hypotheses_list():
+        return {"hypotheses": services.available_hypotheses(root)}
+
     @app.get("/api/hypotheses/{hyp_id}")
     def hypothesis(hyp_id: str):
         d = services.get_hypothesis(root, hyp_id)
@@ -165,6 +175,15 @@ def create_app(root: str = ".", allow_run: bool = True) -> FastAPI:
                 data_utc_offset=body.data_utc_offset)
         except ValueError as e:
             raise HTTPException(400, str(e))
+
+    @app.post("/api/research/idea")
+    def research_idea(body: IdeaIn):
+        """Paste a plain-English idea; the Scout formalises it and the council
+        tests it. Research-only — never capital."""
+        if not allow_run:
+            raise HTTPException(403, "research runs are disabled on this instance")
+        return app.state.runner.run_idea(
+            body.idea, window=body.window, data_utc_offset=body.data_utc_offset)
 
     @app.get("/api/research/status")
     def research_status():

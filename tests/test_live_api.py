@@ -196,6 +196,45 @@ def test_morning_brief_empty_root():
 
 
 # ---- research trigger safety ----------------------------------------------
+def test_hypotheses_list(client, populated):
+    r = client.get("/api/hypotheses").json()["hypotheses"]
+    assert any(h["name"] == "live_losing" for h in r)     # the seeded file
+
+
+def test_chat_lists_experiments(client, populated):
+    r = client.post("/api/chat", json={"message": "retrieve the experiments"}).json()
+    assert r["intent"] == "list_experiments" and r["grounded"] is True
+    assert populated["exp_id"] in r["citations"]
+    assert populated["exp_id"] in r["answer"]
+
+
+def test_chat_lists_hypotheses(client, populated):
+    r = client.post("/api/chat", json={"message": "which hypotheses have you run?"}).json()
+    assert r["intent"] == "list_hypotheses" and r["grounded"] is True
+    assert populated["hyp_id"] in r["citations"]
+
+
+def test_idea_too_short_is_rejected(client):
+    # <8 chars fails pydantic validation (422), not a crash
+    assert client.post("/api/research/idea", json={"idea": "hi"}).status_code == 422
+
+
+def test_idea_run_starts_and_completes(populated):
+    app = create_app(populated["root"])
+    c = TestClient(app)
+    before = len(c.get("/api/events?after_seq=0").json()["events"])
+    r = c.post("/api/research/idea", json={
+        "idea": "mean reversion: fade moves 2 sigma from the 20 period average, target the mean"}).json()
+    assert r["started"] is True
+    for _ in range(80):
+        if not c.get("/api/research/status").json()["running"]:
+            break
+        time.sleep(0.5)
+    assert c.get("/api/research/status").json()["running"] is False
+    after = len(c.get("/api/events?after_seq=0").json()["events"])
+    assert after > before                                 # Scout + council emitted events
+
+
 def test_frontend_served(client):
     html = client.get("/")
     assert html.status_code == 200 and "Atlas Live" in html.text

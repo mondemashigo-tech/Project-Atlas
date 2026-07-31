@@ -7,12 +7,28 @@ the source of truth — nothing is synthesised.
 """
 from __future__ import annotations
 
+import glob
 import os
 from typing import Dict, List, Optional
 
 from ..memory import MemoryStore
 from ..registry import Registry
 from . import roster
+
+
+def available_hypotheses(root: str) -> List[Dict]:
+    """Runnable hypothesis files under <root>/hypotheses/** (name = what the run
+    trigger accepts). Names are unique basenames without extension."""
+    base = os.path.join(root, "hypotheses")
+    out, seen = [], set()
+    for path in sorted(glob.glob(os.path.join(base, "**", "*.y*ml"), recursive=True)):
+        name = os.path.splitext(os.path.basename(path))[0]
+        if name in seen:
+            continue
+        seen.add(name)
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        out.append({"name": name, "path": rel})
+    return out
 
 
 def _open(root: str) -> MemoryStore:
