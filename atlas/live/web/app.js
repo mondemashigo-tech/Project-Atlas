@@ -353,6 +353,32 @@ async function pulse() {
     } catch (e) { $('#arm-msg').textContent = 'error: ' + e.message; }
   };
 
+  // live paper session — watch a cleared strategy trade live data, tally P/L
+  const sess = s.session;
+  const sp = el('div', 'card'); sp.style.marginTop = '14px';
+  const pnl = sess ? Number(sess.realised_pnl) : 0;
+  sp.innerHTML = `<h3>live paper session (real data → paper P/L, no real orders)</h3>
+    <div class="row"><input class="input" id="sess-hyp" placeholder="cleared hypothesis name" style="min-width:240px">
+      <button class="btn primary" id="sess-start">Start paper session</button>
+      <button class="btn" id="sess-stop">Stop</button></div>
+    ${sess ? `<div class="row" style="margin-top:10px;gap:18px">
+        <div><div class="muted">strategy</div><b>${esc(sess.name || '—')}</b></div>
+        <div><div class="muted">running</div><b>${sess.running}</b></div>
+        <div><div class="muted">fills</div><b>${sess.stats.fills}</b></div>
+        <div><div class="muted">closes</div><b>${sess.stats.closes}</b></div>
+        <div><div class="muted">realised P/L</div><b class="${pnl >= 0 ? 'v-PASS' : 'v-REJECT'}">${pnl.toFixed(2)}</b></div>
+        <div><div class="muted">equity</div><b>${Number(sess.equity).toFixed(2)}</b></div></div>
+      ${!sess.armed ? `<div class="muted" style="margin-top:8px">not started: ${esc((sess.clearance || {}).reason || '')}</div>` : ''}`
+      : '<div class="muted" style="margin-top:8px">No session. Start one on a strategy that passed the council. On the laptop set ATLAS_BROKER=mt5 for live OctaFX data.</div>'}`;
+  v.appendChild(sp);
+  $('#sess-start').onclick = async () => {
+    const n = $('#sess-hyp').value.trim(); if (!n) return;
+    try { const r = await post('/api/pulse/session/start', n);
+      if (!r.started) alert('not started: ' + (r.reason || 'blocked')); pulse();
+    } catch (e) { alert('error: ' + e.message); }
+  };
+  $('#sess-stop').onclick = async () => { await api('/api/pulse/session/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); pulse(); };
+
   // kill switch controls (activating is always safe; clearing re-enables non-live)
   const ctrl = el('div', 'row'); ctrl.style.marginTop = '16px';
   const killBtn = el('button', 'btn', s.kill_switch ? 'Clear kill switch' : '⛔ Activate kill switch');

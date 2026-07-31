@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict
+from typing import Optional
 
 from ..execution import AccountMode, CapitalGate, PaperBroker
 
@@ -68,6 +69,9 @@ class PulseManager:
         if ex is not None:
             out["armed_strategy"] = {"name": ex.name, "armed": ex.armed,
                                      "clearance": ex.clearance}
+        sess = getattr(self, "_session", None)
+        if sess is not None:
+            out["session"] = sess.status()
         return out
 
     def activate_kill(self, reason: str = "manual (cockpit)") -> dict:
@@ -87,6 +91,36 @@ class PulseManager:
                       emit=lambda **k: None)
         self._executor = ex
         return ex.arm(path)
+
+    # -- live paper session -------------------------------------------------
+    def start_session(self, hyp_name: str, hub=None, interval: float = None) -> dict:
+        from .session import PaperSession, build_feed
+        from .runner import Runner
+        if getattr(self, "_session", None) is not None and self._session.running():
+            return {"started": False, "reason": "a paper session is already running"}
+        path = Runner(self.root, None).resolve_hypothesis(hyp_name)
+        cfg = __import__("atlas.research.fx.config", fromlist=["load"]).load(path)
+        feed, default_interval = build_feed(self.root, cfg)
+        if feed is None:
+            return {"started": False, "reason": "no live feed: set ATLAS_BROKER=mt5 "
+                    "(MT5 running) or add datasets/ CSVs for this strategy's markets"}
+        bal = 10000.0
+        try:
+            bal = self.broker.get_account_state().balance or bal   # scale to account
+        except Exception:
+            pass
+        self._session = PaperSession(self.root, self.gate, path, feed, hub=hub,
+                                     interval_secs=interval or default_interval,
+                                     start_balance=bal)
+        return self._session.start()
+
+    def stop_session(self) -> dict:
+        s = getattr(self, "_session", None)
+        return s.stop() if s else {"stopped": False, "reason": "no session"}
+
+    def session_status(self) -> Optional[dict]:
+        s = getattr(self, "_session", None)
+        return s.status() if s else None
 
     def replay(self, hyp_name: str, hub=None) -> dict:
         """Paper-trade a strategy over the root's historical data, streaming

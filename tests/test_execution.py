@@ -63,8 +63,8 @@ def test_paper_fill_and_close_tracks_pnl():
     r = b.place_order(OrderRequest("GBPUSD", "BUY", 1.0), ref_price=1.2500)
     assert r.ok and r.simulated and r.order_id
     assert len(b.get_open_positions()) == 1
-    c = b.close_position(r.order_id, ref_price=1.2600)   # +0.01 * 1.0
-    assert c.ok and b.get_account_state().balance == pytest.approx(10000 + 0.01)
+    c = b.close_position(r.order_id, ref_price=1.2600)   # +0.0100 * 1 lot * 100k
+    assert c.ok and b.get_account_state().balance == pytest.approx(10000 + 1000)
     assert b.health_check()["sends_orders"] is False
 
 

@@ -219,6 +219,17 @@ def create_app(root: str = ".", allow_run: bool = True) -> FastAPI:
         except ValueError as e:
             raise HTTPException(400, str(e))
 
+    @app.post("/api/pulse/session/start")
+    def pulse_session_start(body: ChatIn):
+        try:
+            return app.state.pulse.start_session(body.message, hub=app.state.hub)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/pulse/session/stop")
+    def pulse_session_stop():
+        return app.state.pulse.stop_session()
+
     # ---- frontend ----------------------------------------------------------
     if os.path.isdir(_WEB):
         app.mount("/static", StaticFiles(directory=_WEB), name="static")

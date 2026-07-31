@@ -16,14 +16,20 @@ from .broker import (AccountMode, BrokerAdapter, OrderRequest, OrderResult,
 
 class PaperBroker(BrokerAdapter):
     def __init__(self, mode: AccountMode = AccountMode.PAPER,
-                 balance: float = 10000.0):
+                 balance: float = 10000.0, contract_size: float = 100000.0):
         if mode.sends_orders:
             raise ValueError(f"PaperBroker cannot run in a live mode ({mode.value})")
         self.mode = mode
         self._balance = balance
+        self._start_balance = balance
+        self.contract_size = contract_size    # 1 standard lot = 100k units (FX)
         self._positions: Dict[str, Position] = {}
         self._connected = False
         self.intents: List[dict] = []          # SHADOW/OBSERVE record of intent
+
+    @property
+    def realised_pnl(self) -> float:
+        return self._balance - self._start_balance
 
     def connect(self) -> bool:
         self._connected = True
@@ -78,7 +84,8 @@ class PaperBroker(BrokerAdapter):
                                reason="unknown position")
         if ref_price is not None:
             signed = 1 if pos.direction == "BUY" else -1
-            pnl = signed * (ref_price - pos.entry) * pos.volume
+            # P/L in account currency: price move * lots * contract size
+            pnl = signed * (ref_price - pos.entry) * pos.volume * self.contract_size
             self._balance += pnl
             pos.pnl = pnl
         return OrderResult(ok=True, mode=self.mode.value, order_id=position_id,
