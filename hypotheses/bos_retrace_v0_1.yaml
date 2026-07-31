@@ -1,0 +1,41 @@
+# Break of Structure + Retracement Entry — baseline v0.1
+# Video-derived spec (Atlas Strategy Handoff). Confirmed concepts vs assumed
+# parameters are separated in the doc; every value here is a labelled ASSUMPTION
+# to be tested, not a claimed edge. Atlas decides on out-of-sample evidence.
+name: bos_retrace_v0_1
+version: "0.1"
+template: bos_retrace
+markets: [GBPUSD, USDJPY]
+timeframes: {entry: M5}
+session: {start: "08:00", end: "11:00", tz: "Europe/London", data_utc_offset: 0}
+weekdays: [0, 1, 2, 3, 4]
+
+bos:
+  swing_pivot: 3          # confirmed pivot: bars each side (variants: 2, 3, 5)
+  atr_period: 14
+  bos_atr: 0.10           # close beyond level by >= this * ATR (variants: 0.05, 0.10, 0.20)
+  body_frac: 0.60         # breakout candle body >= 60% of its range
+  displacement_atr: 1.20  # breakout true range >= this * ATR (variants: 1.0, 1.2, 1.5)
+  retest_atr: 0.20        # retrace to within this * ATR of the level (variants: 0.10, 0.20, 0.30)
+  expiry_bars: 12         # cancel if no valid retracement within N candles
+  stop_buffer_atr: 0.10   # stop beyond retest swing by this * ATR
+
+risk:
+  target_r: 2.0           # variants: 1.5, 2.0, 2.5
+  max_trades_per_day: 5
+
+costs:
+  spread_pips: 1.0
+  commission_r: 0.05
+
+# Pass/Continue/Reject thresholds transcribed from the spec (Section 11).
+criteria:
+  success: {profit_factor: 1.5, min_trades: 100, expectancy: positive}
+  failure: {profit_factor: 1.2, expectancy: negative}
+
+# Do not optimise and validate on the same period.
+data:
+  in_sample:  ["2020-01-01", "2022-12-31"]
+  out_sample: ["2023-01-01", "2025-12-31"]
+
+source: "Atlas Strategy Handoff — BOS + Retracement (video-derived)"
